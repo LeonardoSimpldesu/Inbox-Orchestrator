@@ -4,6 +4,8 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -46,8 +48,31 @@ class User extends Authenticatable
         ];
     }
 
-    public function emailAccounts()
+    /**
+     * @return HasMany<EmailAccount, $this>
+     */
+    public function emailAccounts(): HasMany
     {
         return $this->hasMany(EmailAccount::class);
+    }
+
+    /**
+     * Senders of every e-mail account owned by this user.
+     *
+     * @return HasManyThrough<EmailSender, EmailAccount, $this>
+     */
+    public function senders(): HasManyThrough
+    {
+        return $this->hasManyThrough(EmailSender::class, EmailAccount::class);
+    }
+
+    /**
+     * Retention rules of every e-mail account owned by this user.
+     *
+     * @return HasManyThrough<RetentionRule, EmailAccount, $this>
+     */
+    public function retentionRules(): HasManyThrough
+    {
+        return $this->hasManyThrough(RetentionRule::class, EmailAccount::class);
     }
 }

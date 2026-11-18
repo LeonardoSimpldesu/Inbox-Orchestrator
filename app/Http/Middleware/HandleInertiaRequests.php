@@ -42,6 +42,7 @@ class HandleInertiaRequests extends Middleware
                     'id' => $request->user()->id,
                     'name' => $request->user()->name,
                     'email' => $request->user()->email,
+                    'two_factor_enabled' => $request->user()->two_factor_confirmed_at !== null,
                     'accounts' => $request->user()->emailAccounts()->select(['id', 'account_email', 'provider', 'last_synced_at', 'is_active'])->get(),
                 ] : null,
             ],

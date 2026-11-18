@@ -11,82 +11,92 @@ use Tests\TestCase;
 
 class DashboardTest extends TestCase
 {
-    public function test_dashboard_renders_successfully_with_inertia(): void
+    private function accountFor(User $user, string $email, bool $active = true): EmailAccount
     {
-        $response = $this->get('/');
-
-        $response->assertStatus(200);
-        $response->assertInertia(fn (Assert $page) => $page
-            ->component('Dashboard')
-            ->has('accounts')
-            ->has('stats')
-            ->has('recentRules')
-        );
-    }
-
-    public function test_dashboard_displays_active_email_accounts_and_metrics(): void
-    {
-        $user = User::factory()->create();
-
-        $account = EmailAccount::create([
+        return EmailAccount::create([
             'user_id' => $user->id,
             'provider' => 'gmail',
-            'account_email' => 'user@gmail.com',
-            'access_token' => 'secret_access_token',
-            'refresh_token' => 'secret_refresh_token',
-            'is_active' => true,
+            'account_email' => $email,
+            'access_token' => 'access_'.$email,
+            'refresh_token' => 'refresh_'.$email,
+            'history_id' => 'cursor_'.$email,
+            'is_active' => $active,
         ]);
+    }
 
-        EmailSender::create([
+    private function senderFor(EmailAccount $account, string $email): EmailSender
+    {
+        return EmailSender::create([
             'email_account_id' => $account->id,
-            'email' => 'newsletter@techcrunch.com',
-            'domain' => 'techcrunch.com',
-            'total_messages_received' => 12,
-            'total_messages_unread' => 5,
+            'email' => $email,
+            'domain' => str($email)->after('@')->toString(),
+            'total_messages_received' => 1,
+            'total_messages_unread' => 1,
         ]);
+    }
 
-        RetentionRule::create([
+    private function ruleFor(EmailAccount $account, string $name): RetentionRule
+    {
+        return RetentionRule::create([
             'email_account_id' => $account->id,
-            'name' => 'Expire promotions in 15 days',
+            'name' => $name,
             'filter_type' => 'category',
             'filter_value' => 'CATEGORY_PROMOTIONS',
             'retention_days' => 15,
             'action' => 'archive',
             'is_active' => true,
         ]);
+    }
 
-        $response = $this->get('/');
+    public function test_guest_is_redirected_to_login(): void
+    {
+        $this->get('/')->assertRedirect('/login');
+        $this->get('/up')->assertOk();
+    }
 
-        $response->assertStatus(200);
-        $response->assertInertia(fn (Assert $page) => $page
-            ->component('Dashboard')
-            ->has('accounts', 1)
-            ->where('accounts.0.account_email', 'user@gmail.com')
-            ->where('stats.totalSenders', 1)
-            ->has('recentRules', 1)
-            ->where('recentRules.0.name', 'Expire promotions in 15 days')
-        );
+    public function test_dashboard_renders_successfully_with_inertia(): void
+    {
+        $this->actingAs(User::factory()->create())
+            ->get('/')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Dashboard')
+                ->has('accounts')
+                ->has('stats')
+                ->has('recentRules')
+            );
+    }
+
+    public function test_dashboard_displays_active_email_accounts_and_metrics(): void
+    {
+        $user = User::factory()->create();
+        $account = $this->accountFor($user, 'user@gmail.com');
+        $this->senderFor($account, 'newsletter@techcrunch.com');
+        $this->ruleFor($account, 'Expire promotions in 15 days');
+
+        $this->actingAs($user)
+            ->get('/')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Dashboard')
+                ->has('accounts', 1)
+                ->where('accounts.0.account_email', 'user@gmail.com')
+                ->where('stats.totalSenders', 1)
+                ->has('recentRules', 1)
+                ->where('recentRules.0.name', 'Expire promotions in 15 days')
+            );
     }
 
     public function test_dashboard_never_exposes_oauth_tokens(): void
     {
         $user = User::factory()->create();
+        $this->accountFor($user, 'user@gmail.com');
 
-        EmailAccount::create([
-            'user_id' => $user->id,
-            'provider' => 'gmail',
-            'account_email' => 'user@gmail.com',
-            'access_token' => 'leaked_access_token_abc',
-            'refresh_token' => 'leaked_refresh_token_xyz',
-            'history_id' => 'internal_history_cursor',
-            'is_active' => true,
-        ]);
-
-        $response = $this->get('/');
+        $response = $this->actingAs($user)->get('/');
 
         $response->assertOk();
-        $response->assertDontSee('leaked_access_token_abc', escape: false);
-        $response->assertDontSee('leaked_refresh_token_xyz', escape: false);
+        $response->assertDontSee('access_user@gmail.com', escape: false);
+        $response->assertDontSee('refresh_user@gmail.com', escape: false);
         $response->assertInertia(fn (Assert $page) => $page
             ->has('accounts.0', fn (Assert $account) => $account
                 ->hasAll(['id', 'provider', 'account_email', 'last_synced_at', 'is_active'])
@@ -98,22 +108,62 @@ class DashboardTest extends TestCase
     public function test_inactive_email_accounts_are_not_displayed_in_active_list(): void
     {
         $user = User::factory()->create();
+        $this->accountFor($user, 'disabled@gmail.com', active: false);
 
-        EmailAccount::create([
-            'user_id' => $user->id,
-            'provider' => 'gmail',
-            'account_email' => 'disabled@gmail.com',
-            'access_token' => 'token1',
-            'refresh_token' => 'token2',
-            'is_active' => false,
-        ]);
+        $this->actingAs($user)
+            ->get('/')
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Dashboard')
+                ->has('accounts', 0)
+            );
+    }
 
-        $response = $this->get('/');
+    public function test_dashboard_only_shows_the_authenticated_users_data(): void
+    {
+        $alice = User::factory()->create();
+        $bob = User::factory()->create();
 
-        $response->assertStatus(200);
+        $aliceAccount = $this->accountFor($alice, 'alice@gmail.com');
+        $this->senderFor($aliceAccount, 'news@a.com');
+        $this->senderFor($aliceAccount, 'promo@a.com');
+        $this->ruleFor($aliceAccount, 'Regra da Alice');
+
+        $bobAccount = $this->accountFor($bob, 'bob@gmail.com');
+        $this->senderFor($bobAccount, 'news@b.com');
+        $this->senderFor($bobAccount, 'promo@b.com');
+        $this->senderFor($bobAccount, 'other@b.com');
+        $this->ruleFor($bobAccount, 'Regra do Bob');
+
+        $response = $this->actingAs($alice)->get('/');
+
         $response->assertInertia(fn (Assert $page) => $page
-            ->component('Dashboard')
-            ->has('accounts', 0)
+            ->has('accounts', 1)
+            ->where('accounts.0.account_email', 'alice@gmail.com')
+            ->where('stats.totalSenders', 2)
+            ->has('recentRules', 1)
+            ->where('recentRules.0.name', 'Regra da Alice')
+            ->has('auth.user.accounts', 1)
+            ->where('auth.user.accounts.0.account_email', 'alice@gmail.com')
         );
+        $response->assertDontSee('bob@gmail.com');
+        $response->assertDontSee('Regra do Bob');
+    }
+
+    public function test_shared_auth_user_props_never_expose_secrets(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->get('/');
+
+        $response->assertInertia(fn (Assert $page) => $page
+            ->has('auth.user', fn (Assert $shared) => $shared
+                ->where('id', $user->id)
+                ->where('name', $user->name)
+                ->where('email', $user->email)
+                ->where('two_factor_enabled', false)
+                ->has('accounts')
+            )
+        );
+        $response->assertDontSee($user->password, escape: false);
     }
 }
