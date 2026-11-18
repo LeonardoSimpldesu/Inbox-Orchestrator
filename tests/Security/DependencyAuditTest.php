@@ -57,6 +57,9 @@ class DependencyAuditTest extends TestCase
 
     public function test_allowlist_entries_are_justified_and_not_expired(): void
     {
+        $file = json_decode(file_get_contents(base_path(self::ALLOWLIST)), true);
+        $this->assertTrue(is_array($file['composer'] ?? null) && array_is_list($file['composer']) && is_array($file['npm'] ?? null) && array_is_list($file['npm']), self::ALLOWLIST.' must declare "composer" and "npm" lists.');
+
         foreach (['composer', 'npm'] as $ecosystem) {
             foreach ($this->allowlist($ecosystem) as $id => $entry) {
                 $this->assertNotEmpty($entry['reason'] ?? null, "[{$ecosystem}] {$id} must state a reason.");
