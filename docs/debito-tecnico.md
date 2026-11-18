@@ -10,7 +10,8 @@ Itens conhecidos que ficaram para depois. Cada um traz o impacto, onde está e u
 | 4 | Campo interno extra nas regras do dashboard | Limpeza | Baixa |
 | 5 | Endpoints de 2FA sem checagem de usuário desativado | Segurança (defesa em profundidade) | Baixa |
 | 6 | Título da aba vazio nas páginas internas | UX | Baixa |
-| 7 | Aviso de estilo do Pint no `UserFactory` | Qualidade | Baixa |
+| 7 | Acesso ao Gmail expira a cada 7 dias (app do Google em modo Teste) | UX / operação | Alta antes de uso diário |
+| 8 | Contas Gmail desconectadas guardadas para sempre | Privacidade / limpeza | Média |
 
 ---
 
@@ -74,10 +75,27 @@ Itens conhecidos que ficaram para depois. Cada um traz o impacto, onde está e u
 
 **Sugestão:** renderizar `<Head title={title} />` no `AppLayout` (como já faz o `GuestLayout`).
 
-## 7. Aviso de estilo do Pint no `UserFactory`
+## 7. Acesso ao Gmail expira a cada 7 dias
 
-**Origem:** anterior à autenticação (código gerado pelo Laravel).
+**Origem:** conexão Gmail (2026-11-18).
 
-**O que acontece:** `vendor/bin/pint --test` aponta `fully_qualified_strict_types` e `ordered_imports` em `database/factories/UserFactory.php`.
+**O que acontece:** o app OAuth do Google é "Externo" e está em modo **Teste**. Nesse modo o Google expira o refresh token 7 dias depois da autorização, e só testadores cadastrados conseguem conectar. O app mostra "Reconecte até dd/mm" e marca a conta como "Precisa reconectar" (`GOOGLE_OAUTH_TESTING=true`), mas cada pessoa precisa reconectar toda semana.
 
-**Sugestão:** rodar `vendor/bin/pint database/factories/UserFactory.php` e considerar adicionar `pint --test` à verificação antes de merge.
+**Onde:** configuração do projeto no Google Cloud Console; `config/services.php` (`google.testing`); `EmailAccount::reconnectBy()`.
+
+**Soluções:**
+1. **Publicar o app em Produção sem verificação (recomendada para uso pessoal).** Em "OAuth consent screen", clicar em "Publish app". Os refresh tokens deixam de expirar por semana. Custos: a pessoa vê a tela "O Google não verificou este app" e precisa clicar em "Avançado > Acessar"; apps não verificados com escopos restritos têm limite de 100 usuários. Depois, trocar `GOOGLE_OAUTH_TESTING=false`.
+2. **Verificação completa do Google.** Exige política de privacidade, domínio verificado, vídeo de demonstração e, para escopos restritos (`gmail.modify`, `gmail.send`), a avaliação de segurança CASA anual, que é paga. Só compensa se o app for aberto ao público.
+3. **Google Workspace com app "Interno".** Sem expiração e sem verificação, mas só aceita contas do próprio domínio Workspace. Não serve para contas @gmail.com.
+
+Mesmo sem a expiração semanal, o refresh token ainda pode ser invalidado (senha trocada, acesso revogado pela pessoa, 6 meses sem uso). Esse caso já é tratado: `reauth_required_at` + "Precisa reconectar".
+
+## 8. Contas Gmail desconectadas guardadas para sempre
+
+**Origem:** conexão Gmail (2026-11-18).
+
+**O que acontece:** desconectar faz soft delete. Remetentes, metadados e regras ficam guardados para quando a pessoa reconectar, sem prazo de exclusão.
+
+**Onde:** `EmailAccountController::destroy`, `email_accounts.deleted_at`.
+
+**Sugestão:** comando agendado (ex.: `inbox:purge-disconnected-accounts`, diário) que faz `forceDelete()` das contas desconectadas há mais de N dias (ex.: 90; configurável), apagando em cascata os dados ligados. Mostrar o prazo na mensagem de desconexão.

@@ -73,10 +73,13 @@ Contas de e-mail conectadas por cada usuário (suporte a múltiplas contas).
 - `access_token` (Text, Encrypted com `Crypt::encryptString`)
 - `refresh_token` (Text, Encrypted)
 - `token_expires_at` (Timestamp)
+- `authorized_at` (Timestamp, Nullable - quando o Google emitiu o refresh token atual; base do prazo de reconexão em modo Teste)
+- `reauth_required_at` (Timestamp, Nullable - o Google recusou a renovação; a conta precisa ser reconectada)
 - `history_id` / `sync_token` (String, Nullable - para sync incremental)
 - `last_synced_at` (Timestamp, Nullable)
-- `is_active` (Boolean, Default true)
+- `deleted_at` (Timestamp, Nullable - soft delete: conta desconectada, dados guardados para reconexão)
 - `created_at`, `updated_at`
+- Um mesmo Gmail só pode estar conectado (não desconectado) por um usuário por vez.
 
 ### 3.3. `email_senders`
 Indexação agregada de remetentes para triagem e desinscrição.
@@ -139,14 +142,15 @@ Histórico de auditoria das execuções de regras.
 ## 4. Especificação de Funcionalidades do MVP
 
 ### 4.1. Conexão de Contas (OAuth 2.0)
-1. O usuário acessa a tela de configurações / contas.
-2. Clica em **"Conectar Conta Gmail"**.
-3. Redirecionamento para tela de consentimento Google com escopos:
-   - `https://www.googleapis.com/auth/gmail.readonly`
+1. O usuário acessa a tela **Contas** (`/accounts`).
+2. Clica em **"Conectar conta Gmail"**.
+3. Redirecionamento para tela de consentimento Google com escopos (o `gmail.modify` já inclui leitura):
    - `https://www.googleapis.com/auth/gmail.modify`
    - `https://www.googleapis.com/auth/gmail.send`
-4. Callback recebe o `code`, troca por `access_token` e `refresh_token` (offline access com `access_type=offline` e `prompt=consent`).
+4. Callback valida o `state`, recebe o `code` e troca por `access_token` e `refresh_token` (`access_type=offline`, `prompt=consent`). Conexões sem todas as permissões ou de um Gmail já conectado por outro usuário são recusadas.
 5. Dispara imediatamente o job inicial de sincronização de metadados em segundo plano.
+6. **Reconectar** renova o acesso da mesma conta. **Desconectar** revoga o acesso no Google e faz soft delete; reconectar depois restaura remetentes e regras.
+7. Com o app do Google em modo Teste, o acesso expira em 7 dias: a tela mostra "Reconecte até dd/mm" e o painel avisa quando falta pouco ou já expirou (ver `docs/debito-tecnico.md`, item 7). Design: `docs/superpowers/specs/2026-11-18-gmail-oauth-design.md`.
 
 ### 4.2. Hub de Assinaturas (Unsubscribe Manager)
 1. **Listagem Agregada:** Apresenta lista de remetentes com nome, domínio, total de e-mails, quantos estão não lidos e data do último recebido.
@@ -209,7 +213,7 @@ app/
   - ✅ Setup Laravel 13 + Inertia + React (TypeScript) + Tailwind + Database Queue.
   - ✅ Autenticação e gestão de múltiplos usuários: login com Fortify, 2FA opcional, reset de senha, sem cadastro público; usuários gerenciados por `php artisan user:create|disable|enable|delete|reset-two-factor`. Dados isolados por usuário. Detalhes em `docs/superpowers/specs/2026-11-18-authentication-design.md`.
   - Requisito para as próximas etapas: jobs de sincronização e regras TTL devem ignorar contas de usuários desativados (`users.disabled_at`), e as consultas devem partir do usuário (`$user->emailAccounts()`, `senders()`, `retentionRules()`).
-  - Conexão OAuth 2.0 com Gmail e armazenamento criptografado de tokens.
+  - ✅ Conexão OAuth 2.0 com Gmail e armazenamento criptografado de tokens: tela Contas, reconectar, desconectar (soft delete), um Gmail por usuário, aviso de expiração do modo Teste.
   - Worker de sincronização de metadados e remetentes.
   - Tela do Hub de Assinaturas com Unsubscribe e links diretos para o Gmail.
   - Tela de Regras de Expiração (TTL) com Dry-Run, execução diária e botão manual.

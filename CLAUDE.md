@@ -48,6 +48,13 @@ User management (no public registration): `php artisan user:create|user:disable|
 ### Data isolation
 Every query starts from the authenticated user: `User::emailAccounts()`, `senders()` and `retentionRules()` (`hasManyThrough` via `EmailAccount`). Shared Inertia props (`HandleInertiaRequests::share`) expose only `id, name, email, two_factor_enabled, accounts`. OAuth tokens on `EmailAccount` are `encrypted` casts **and** `$hidden` (casts decrypt on serialization). Future sync/retention jobs must skip accounts of disabled users.
 
+### Gmail connection (OAuth)
+- `App\Contracts\EmailProviderInterface` is implemented by `App\Services\Providers\GmailProviderService` (wraps `Google\Client`, bound in `AppServiceProvider`). Feature tests swap it for `tests/Fakes/FakeEmailProvider`; the real service is tested with a Guzzle `MockHandler`. Google errors become `OAuthExchangeFailed` (message = error type only, safe to log) or `ReauthorizationRequired` (`invalid_grant`, sets `reauth_required_at`).
+- `EmailAccountController`: `/accounts` page, `POST /accounts/google/redirect` (state in session `google_oauth_state`), callback, `DELETE /accounts/{id}`. Never log the OAuth `code` or tokens.
+- Disconnect = revoke at Google + **soft delete** (`deleted_at`); reconnecting the same Gmail by the same user restores the row. A Gmail can be active for only one user (checked in the callback; soft-deleted rows don't count). Rejected grants are discarded **without revoking**: the Google grant is shared, so revoking would cut off the user who has it connected.
+- Account state is derived on `EmailAccount` (`needsReauth()`, `reconnectBy()`, `expiringSoon()`, `summary()` = the only shape sent to the frontend). `services.google.testing` (`GOOGLE_OAUTH_TESTING`) enables the 7-day reconnect window of Google's "Testing" status.
+- `SyncEmailAccountJob` takes the account id (no tokens in queue payloads) and skips disconnected accounts, disabled users and accounts needing reauth.
+
 ### Frontend
 Inertia pages in `resources/js/Pages`, layouts `AppLayout` (authenticated) and `GuestLayout` (auth screens), shared inputs in `Components/`. Shared props are typed via module augmentation of `@inertiajs/core` (`InertiaConfig.sharedPageProps`) in `resources/js/types/inertia.d.ts`; domain types in `resources/js/types/index.d.ts`.
 
