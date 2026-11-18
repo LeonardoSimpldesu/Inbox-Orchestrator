@@ -10,7 +10,8 @@ import {
     Layers, 
     ShieldCheck, 
     AlertCircle,
-    CheckCircle2
+    CheckCircle2,
+    Mail
 } from 'lucide-react';
 
 interface AppLayoutProps {
@@ -71,6 +72,14 @@ export default function AppLayout({ children }: AppLayoutProps) {
                                 <span className="text-slate-500 hidden xl:inline">({user.email})</span>
                             </div>
                         )}
+                        <Link
+                            href="/accounts"
+                            title="Contas"
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:bg-slate-800/80 hover:text-white transition"
+                        >
+                            <Mail className="w-4 h-4" />
+                            <span className="hidden lg:inline">Contas</span>
+                        </Link>
                         <Link
                             href="/settings/security"
                             title="Segurança"

@@ -1,5 +1,8 @@
 import type { EmailAccountSummary, RetentionRuleSummary } from '@/types';
+import { Link } from '@inertiajs/react';
 import AppLayout from '../Layouts/AppLayout';
+import AccountStatusBadge from '@/Components/AccountStatusBadge';
+import { connectGmail } from '@/lib/gmail';
 import { 
     Mail, 
     Trash2, 
@@ -10,7 +13,8 @@ import {
     RefreshCw, 
     ShieldCheck, 
     AtSign, 
-    Zap 
+    Zap,
+    AlertTriangle
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -20,6 +24,8 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ accounts, stats, recentRules }: DashboardProps) {
+    const needsAttention = accounts.some((account) => account.status === 'needs_reauth' || account.expiring_soon);
+
     return (
         <AppLayout title="Cockpit de Automação">
             {/* Header */}
@@ -39,11 +45,11 @@ export default function Dashboard({ accounts, stats, recentRules }: DashboardPro
                 <div className="flex items-center gap-2">
                     <button 
                         type="button"
-                        onClick={() => alert('Em breve: Conexão OAuth 2.0 com Google')}
+                        onClick={() => connectGmail()}
                         className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-lg shadow-indigo-600/20 transition cursor-pointer"
                     >
                         <Plus className="w-4 h-4" />
-                        <span>Conectar Conta Gmail</span>
+                        <span className="whitespace-nowrap">Conectar Conta Gmail</span>
                     </button>
 
                     <button 
@@ -57,6 +63,18 @@ export default function Dashboard({ accounts, stats, recentRules }: DashboardPro
                     </button>
                 </div>
             </div>
+
+            {needsAttention && (
+                <div role="alert" className="mt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-amber-500/40 bg-amber-950/40 p-4 text-sm text-amber-200">
+                    <div className="flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+                        <span>Uma ou mais contas Gmail precisam ser reconectadas para continuar funcionando.</span>
+                    </div>
+                    <Link href="/accounts" className="text-xs font-semibold text-amber-100 underline underline-offset-2 hover:text-white">
+                        Ver contas
+                    </Link>
+                </div>
+            )}
 
             {/* Quick Metrics */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
@@ -132,7 +150,7 @@ export default function Dashboard({ accounts, stats, recentRules }: DashboardPro
                                 </p>
                                 <button
                                     type="button"
-                                    onClick={() => alert('Em breve: Conexão OAuth 2.0')}
+                                    onClick={() => connectGmail()}
                                     className="inline-flex items-center gap-2 bg-indigo-600/90 hover:bg-indigo-600 text-white text-xs font-semibold px-4 py-2 rounded-lg transition"
                                 >
                                     <Plus className="w-3.5 h-3.5" />
@@ -152,9 +170,7 @@ export default function Dashboard({ accounts, stats, recentRules }: DashboardPro
                                                 <div className="text-xs text-slate-500">Última sinc: {acc.last_synced_at || 'Nunca'}</div>
                                             </div>
                                         </div>
-                                        <span className="text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                                            Ativa
-                                        </span>
+                                        <AccountStatusBadge account={acc} />
                                     </div>
                                 ))}
                             </div>
