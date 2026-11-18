@@ -4,7 +4,8 @@
     "scripts": {
         "build": "vite build",
         "dev": "vite",
-        "audit:prod": "npm audit --omit=dev"
+        "audit:prod": "npm audit --omit=dev",
+        "test:security": "node --test \"tests/js/**/*.test.mjs\""
     },
     "dependencies": {
         "@inertiajs/react": "^3.0.0",
