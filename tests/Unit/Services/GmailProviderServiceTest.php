@@ -138,6 +138,15 @@ class GmailProviderServiceTest extends TestCase
         }
     }
 
+    public function test_exchange_code_network_failure_throws(): void
+    {
+        $this->expectException(OAuthExchangeFailed::class);
+        $this->expectExceptionMessage('request_failed');
+
+        $this->service([new ConnectException('down', new Request('POST', 'x'))])
+            ->exchangeCode('auth-code');
+    }
+
     public function test_exchange_code_profile_failure_throws(): void
     {
         $this->expectException(OAuthExchangeFailed::class);
