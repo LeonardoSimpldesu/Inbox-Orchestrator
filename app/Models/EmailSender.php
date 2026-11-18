@@ -20,6 +20,7 @@ class EmailSender extends Model
         'total_messages_unread',
         'unsubscribe_mailto',
         'unsubscribe_url',
+        'unsubscribe_one_click',
         'unsubscribe_status',
         'last_email_received_at',
     ];
@@ -28,6 +29,7 @@ class EmailSender extends Model
         'last_email_received_at' => 'datetime',
         'total_messages_received' => 'integer',
         'total_messages_unread' => 'integer',
+        'unsubscribe_one_click' => 'boolean',
     ];
 
     public function account(): BelongsTo

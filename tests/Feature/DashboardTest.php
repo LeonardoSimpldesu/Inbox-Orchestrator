@@ -99,7 +99,7 @@ class DashboardTest extends TestCase
         $response->assertDontSee('refresh_user@gmail.com', escape: false);
         $response->assertInertia(fn (Assert $page) => $page
             ->has('accounts.0', fn (Assert $account) => $account
-                ->hasAll(['id', 'provider', 'account_email', 'last_synced_at', 'status', 'reconnect_by', 'expiring_soon'])
+                ->hasAll(['id', 'provider', 'account_email', 'last_synced_at', 'status', 'reconnect_by', 'expiring_soon', 'sync'])
                 ->missingAll(['access_token', 'refresh_token', 'history_id', 'user_id', 'authorized_at', 'reauth_required_at', 'deleted_at'])
             )
         );

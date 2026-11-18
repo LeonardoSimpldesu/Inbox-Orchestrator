@@ -6,6 +6,11 @@ export interface EmailAccountSummary {
     status: 'connected' | 'needs_reauth';
     reconnect_by: string | null;
     expiring_soon: boolean;
+    sync: {
+        state: 'importing_recent' | 'importing_history' | 'complete';
+        oldest_synced_at: string | null;
+        last_synced_at: string | null;
+    };
 }
 
 export interface User {

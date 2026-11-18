@@ -210,11 +210,43 @@ class EmailAccountTest extends TestCase
         $summary = $account->summary();
 
         $this->assertSame(
-            ['id', 'provider', 'account_email', 'last_synced_at', 'status', 'reconnect_by', 'expiring_soon'],
+            ['id', 'provider', 'account_email', 'last_synced_at', 'status', 'reconnect_by', 'expiring_soon', 'sync'],
             array_keys($summary),
         );
         $this->assertSame('me@gmail.com', $summary['account_email']);
         $this->assertStringNotContainsString($account->access_token, json_encode($summary));
         $this->assertStringNotContainsString($account->refresh_token, json_encode($summary));
+    }
+
+    public function test_sync_state_transitions(): void
+    {
+        $account = EmailAccount::factory()->create(['history_id' => null]);
+        $this->assertSame('importing_recent', $account->syncState());
+
+        $account->history_id = '123';
+        $this->assertSame('importing_history', $account->syncState());
+
+        $account->history_completed_at = now();
+        $this->assertSame('complete', $account->syncState());
+    }
+
+    public function test_summary_includes_sync_progress_without_queries(): void
+    {
+        $account = EmailAccount::factory()->create([
+            'history_id' => '9',
+            'oldest_synced_at' => '2024-03-12 10:00:00',
+            'last_synced_at' => '2026-11-18 12:00:00',
+        ])->fresh();
+
+        DB::enableQueryLog();
+        $summary = $account->summary();
+        $queries = DB::getQueryLog();
+        DB::disableQueryLog();
+
+        $this->assertSame([], $queries);
+        $this->assertSame(['state', 'oldest_synced_at', 'last_synced_at'], array_keys($summary['sync']));
+        $this->assertSame('importing_history', $summary['sync']['state']);
+        $this->assertSame('2024-03-12', $summary['sync']['oldest_synced_at']);
+        $this->assertSame($summary['last_synced_at'], $summary['sync']['last_synced_at']);
     }
 }

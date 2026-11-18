@@ -29,6 +29,8 @@ class EmailAccount extends Model
         'reauth_required_at',
         'history_id',
         'last_synced_at',
+        'oldest_synced_at',
+        'history_completed_at',
     ];
 
     /**
@@ -47,6 +49,8 @@ class EmailAccount extends Model
         'authorized_at' => 'datetime',
         'reauth_required_at' => 'datetime',
         'last_synced_at' => 'datetime',
+        'oldest_synced_at' => 'datetime',
+        'history_completed_at' => 'datetime',
     ];
 
     public function user(): BelongsTo
@@ -93,7 +97,19 @@ class EmailAccount extends Model
     }
 
     /**
-     * @return array{id: int, provider: string, account_email: string, last_synced_at: ?string, status: 'connected'|'needs_reauth', reconnect_by: ?string, expiring_soon: bool}
+     * @return 'importing_recent'|'importing_history'|'complete'
+     */
+    public function syncState(): string
+    {
+        return match (true) {
+            $this->history_id === null => 'importing_recent',
+            $this->history_completed_at === null => 'importing_history',
+            default => 'complete',
+        };
+    }
+
+    /**
+     * @return array{id: int, provider: string, account_email: string, last_synced_at: ?string, status: 'connected'|'needs_reauth', reconnect_by: ?string, expiring_soon: bool, sync: array{state: string, oldest_synced_at: ?string, last_synced_at: ?string}}
      */
     public function summary(): array
     {
@@ -105,6 +121,11 @@ class EmailAccount extends Model
             'status' => $this->needsReauth() ? 'needs_reauth' : 'connected',
             'reconnect_by' => $this->reconnectBy()?->toDateString(),
             'expiring_soon' => $this->expiringSoon(),
+            'sync' => [
+                'state' => $this->syncState(),
+                'oldest_synced_at' => $this->oldest_synced_at?->toDateString(),
+                'last_synced_at' => $this->last_synced_at?->toIso8601String(),
+            ],
         ];
     }
 }
