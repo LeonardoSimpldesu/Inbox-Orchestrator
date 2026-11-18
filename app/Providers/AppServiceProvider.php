@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Contracts\EmailProviderInterface;
+use App\Services\Providers\GmailProviderService;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 
@@ -12,7 +14,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(EmailProviderInterface::class, fn () => new GmailProviderService);
     }
 
     /**
