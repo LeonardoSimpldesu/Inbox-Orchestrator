@@ -32,7 +32,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                             <Layers className="w-5 h-5" />
                         </div>
                         <div>
-                            <span className="font-bold text-lg tracking-tight bg-gradient-to-r from-indigo-400 via-sky-300 to-teal-300 bg-clip-text text-transparent">
+                            <span className="whitespace-nowrap font-bold text-lg tracking-tight bg-gradient-to-r from-indigo-400 via-sky-300 to-teal-300 bg-clip-text text-transparent">
                                 Inbox Orchestrator
                             </span>
                             <span className="text-xs text-slate-400 block font-mono">v1.0 MVP</span>
@@ -45,40 +45,49 @@ export default function AppLayout({ children }: AppLayoutProps) {
                             className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-slate-200 hover:bg-slate-800/80 hover:text-white transition"
                         >
                             <Inbox className="w-4 h-4 text-indigo-400" />
-                            <span>Visão Geral</span>
+                            <span className="whitespace-nowrap">Visão Geral</span>
                         </Link>
                         <Link 
                             href="/subscriptions" 
                             className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-slate-400 hover:bg-slate-800/80 hover:text-slate-200 transition"
                         >
                             <MailCheck className="w-4 h-4 text-emerald-400" />
-                            <span>Assinaturas</span>
+                            <span className="whitespace-nowrap">Assinaturas</span>
                         </Link>
                         <Link 
                             href="/retention-rules" 
                             className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-slate-400 hover:bg-slate-800/80 hover:text-slate-200 transition"
                         >
                             <Clock className="w-4 h-4 text-amber-400" />
-                            <span>Regras TTL</span>
+                            <span className="whitespace-nowrap">Regras TTL</span>
                         </Link>
                     </nav>
 
                     <div className="flex items-center gap-3">
                         {user && (
-                            <div className="flex items-center gap-2 bg-slate-800/50 border border-slate-700/60 rounded-full px-3 py-1 text-xs">
+                            <div className="hidden lg:flex items-center gap-2 bg-slate-800/50 border border-slate-700/60 rounded-full px-3 py-1 text-xs">
                                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                                <span className="text-slate-300 font-medium">{user.name}</span>
-                                <span className="text-slate-500 hidden md:inline">({user.email})</span>
+                                <span className="text-slate-300 font-medium whitespace-nowrap">{user.name}</span>
+                                <span className="text-slate-500 hidden xl:inline">({user.email})</span>
                             </div>
                         )}
                         <Link
+                            href="/settings/security"
+                            title="Segurança"
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:bg-slate-800/80 hover:text-white transition"
+                        >
+                            <ShieldCheck className="w-4 h-4" />
+                            <span className="hidden lg:inline">Segurança</span>
+                        </Link>
+                        <Link
                             href="/logout"
+                            title="Sair"
                             method="post"
                             as="button"
                             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:bg-slate-800/80 hover:text-white transition cursor-pointer"
                         >
                             <LogOut className="w-4 h-4" />
-                            <span>Sair</span>
+                            <span className="hidden lg:inline">Sair</span>
                         </Link>
                     </div>
                 </div>

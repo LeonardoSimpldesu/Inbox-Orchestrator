@@ -54,6 +54,10 @@ class FortifyServiceProvider extends ServiceProvider
             'token' => $request->route('token'),
             'email' => (string) $request->query('email', ''),
         ]));
+
+        Fortify::twoFactorChallengeView(fn () => Inertia::render('Auth/TwoFactorChallenge'));
+
+        Fortify::confirmPasswordView(fn () => Inertia::render('Auth/ConfirmPassword'));
     }
 
     private function registerRateLimiters(): void
