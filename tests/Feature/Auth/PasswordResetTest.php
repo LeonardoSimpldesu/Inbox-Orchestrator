@@ -4,6 +4,7 @@ namespace Tests\Feature\Auth;
 
 use App\Models\User;
 use Illuminate\Auth\Notifications\ResetPassword;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -146,5 +147,21 @@ class PasswordResetTest extends TestCase
         $this->assertSame('Redefinição de senha', $mail->subject);
         $this->assertSame('Redefinir senha', $mail->actionText);
         $this->assertContains('Este link de redefinição de senha expira em 60 minutos.', $mail->outroLines);
+    }
+
+    public function test_password_change_ends_other_open_sessions(): void
+    {
+        $user = User::factory()->create(['email' => 'user@example.com']);
+
+        // A session opened elsewhere (e.g. a stolen or forgotten device).
+        $this->post('/login', ['email' => 'user@example.com', 'password' => 'password']);
+        $this->get('/')->assertOk();
+
+        // The password is reset from another device.
+        $user->forceFill(['password' => self::NEW_PASSWORD])->save();
+        Auth::forgetGuards(); // next request loads the user fresh, as in production
+
+        $this->get('/')->assertRedirect('/login');
+        $this->assertGuest();
     }
 }
