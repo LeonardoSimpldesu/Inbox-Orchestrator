@@ -3,8 +3,10 @@
 namespace Tests\Unit\Services;
 
 use App\Contracts\EmailProviderInterface;
+use App\Exceptions\HistoryExpired;
 use App\Exceptions\MissingRequiredScopes;
 use App\Exceptions\OAuthExchangeFailed;
+use App\Exceptions\ProviderUnavailable;
 use App\Exceptions\ReauthorizationRequired;
 use App\Models\EmailAccount;
 use App\Services\Providers\GmailProviderService;
@@ -255,5 +257,211 @@ class GmailProviderServiceTest extends TestCase
     public function test_default_constructor_builds_a_working_service(): void
     {
         $this->assertStringStartsWith('https://accounts.google.com/', app(EmailProviderInterface::class)->authorizationUrl('s'));
+    }
+
+    private function connectedAccount(): EmailAccount
+    {
+        return EmailAccount::factory()->create(['access_token' => 'valid-access', 'token_expires_at' => now()->addHour()]);
+    }
+
+    /**
+     * @param  array<string, array{status: int, body: array<string, mixed>}>  $parts  keyed by message id
+     */
+    private function batchResponse(array $parts): Response
+    {
+        $boundary = 'batch_test_boundary';
+        $body = '';
+
+        foreach ($parts as $id => $part) {
+            $reason = $part['status'] === 200 ? 'OK' : 'Error';
+            $body .= "--{$boundary}\r\nContent-Type: application/http\r\nContent-ID: response-{$id}\r\n\r\n"
+                ."HTTP/1.1 {$part['status']} {$reason}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n"
+                .json_encode($part['body'])."\r\n";
+        }
+
+        return new Response(200, ['Content-Type' => "multipart/mixed; boundary={$boundary}"], $body."--{$boundary}--");
+    }
+
+    private function gmailMessage(string $id, array $headers = [], array $labels = ['INBOX', 'UNREAD']): array
+    {
+        return [
+            'id' => $id,
+            'threadId' => 'thread-'.$id,
+            'labelIds' => $labels,
+            'internalDate' => '1731900000000',
+            'payload' => ['headers' => array_map(fn ($name, $value) => ['name' => $name, 'value' => $value], array_keys($headers), $headers)],
+        ];
+    }
+
+    public function test_current_history_id_reads_profile(): void
+    {
+        $id = $this->service([$this->jsonResponse(['emailAddress' => 'a@gmail.com', 'historyId' => '4242'])])
+            ->currentHistoryId($this->connectedAccount());
+
+        $this->assertSame('4242', $id);
+        $this->assertSame('Bearer valid-access', $this->history[0]['request']->getHeaderLine('Authorization'));
+    }
+
+    public function test_list_message_ids_sends_query_and_paginates(): void
+    {
+        $page = $this->service([$this->jsonResponse([
+            'messages' => [['id' => 'm1', 'threadId' => 't1'], ['id' => 'm2', 'threadId' => 't2']],
+            'nextPageToken' => 'next-token',
+        ])])->listMessageIds($this->connectedAccount(), 'after:1700000000', 'prev-token', 100);
+
+        $this->assertSame(['m1', 'm2'], $page->ids);
+        $this->assertSame('next-token', $page->nextPageToken);
+
+        $query = $this->queryOf((string) $this->history[0]['request']->getUri());
+        $this->assertSame('after:1700000000', $query['q']);
+        $this->assertSame('prev-token', $query['pageToken']);
+        $this->assertSame('100', $query['maxResults']);
+        $this->assertArrayNotHasKey('includeSpamTrash', $query);
+    }
+
+    public function test_list_message_ids_empty_page(): void
+    {
+        $page = $this->service([$this->jsonResponse(['resultSizeEstimate' => 0])])
+            ->listMessageIds($this->connectedAccount(), 'before:1');
+
+        $this->assertSame([], $page->ids);
+        $this->assertNull($page->nextPageToken);
+    }
+
+    public function test_fetch_metadata_uses_one_batch_request_per_100_ids(): void
+    {
+        $ids = array_map(fn ($i) => "m{$i}", range(1, 150));
+        $first = array_fill_keys(array_slice($ids, 0, 100), null);
+        $second = array_fill_keys(array_slice($ids, 100), null);
+        $part = fn ($id) => ['status' => 200, 'body' => $this->gmailMessage($id, [
+            'From' => '"News" <news@site.com>',
+            'subject' => 'Oferta',
+            'List-Unsubscribe' => '<https://site.com/u>',
+            'List-Unsubscribe-Post' => 'List-Unsubscribe=One-Click',
+        ])];
+
+        $messages = $this->service([
+            $this->batchResponse(array_combine(array_keys($first), array_map($part, array_keys($first)))),
+            $this->batchResponse(array_combine(array_keys($second), array_map($part, array_keys($second)))),
+        ])->fetchMetadata($this->connectedAccount(), $ids);
+
+        $this->assertCount(2, $this->history);
+        $this->assertSame('https://gmail.googleapis.com/batch', (string) $this->history[0]['request']->getUri());
+        $this->assertStringContainsString('format=metadata', (string) $this->history[0]['request']->getBody());
+        $this->assertStringContainsString('metadataHeaders=List-Unsubscribe-Post', (string) $this->history[0]['request']->getBody());
+        $this->assertCount(150, $messages);
+
+        $message = $messages[0];
+        $this->assertSame('m1', $message->id);
+        $this->assertSame('thread-m1', $message->threadId);
+        $this->assertSame(['INBOX', 'UNREAD'], $message->labelIds);
+        $this->assertSame(1731900000, $message->internalDate->timestamp);
+        $this->assertSame('"News" <news@site.com>', $message->from);
+        $this->assertSame('Oferta', $message->subject);
+        $this->assertSame('<https://site.com/u>', $message->listUnsubscribe);
+        $this->assertSame('List-Unsubscribe=One-Click', $message->listUnsubscribePost);
+    }
+
+    public function test_fetch_metadata_omits_not_found_items(): void
+    {
+        $messages = $this->service([$this->batchResponse([
+            'gone' => ['status' => 404, 'body' => ['error' => ['code' => 404, 'message' => 'Not Found']]],
+            'kept' => ['status' => 200, 'body' => $this->gmailMessage('kept')],
+        ])])->fetchMetadata($this->connectedAccount(), ['gone', 'kept']);
+
+        $this->assertSame(['kept'], array_map(fn ($m) => $m->id, $messages));
+        $this->assertNull($messages[0]->from);
+    }
+
+    public function test_fetch_metadata_with_no_ids_makes_no_request(): void
+    {
+        $this->assertSame([], $this->service()->fetchMetadata($this->connectedAccount(), []));
+        $this->assertCount(0, $this->history);
+    }
+
+    public function test_fetch_metadata_rate_limited_item_throws_provider_unavailable(): void
+    {
+        $this->expectException(ProviderUnavailable::class);
+
+        $this->service([$this->batchResponse([
+            'm1' => ['status' => 429, 'body' => ['error' => ['code' => 429, 'message' => 'Too many']]],
+        ])])->fetchMetadata($this->connectedAccount(), ['m1']);
+    }
+
+    public function test_list_changes_collects_changed_and_deleted_ids(): void
+    {
+        $page = $this->service([$this->jsonResponse([
+            'history' => [
+                ['id' => '11', 'messagesAdded' => [['message' => ['id' => 'new1']]]],
+                ['id' => '12', 'labelsAdded' => [['message' => ['id' => 'lab1'], 'labelIds' => ['TRASH']]]],
+                ['id' => '13', 'labelsRemoved' => [['message' => ['id' => 'lab2'], 'labelIds' => ['UNREAD']]]],
+                ['id' => '14', 'messagesAdded' => [['message' => ['id' => 'tmp']]], 'messagesDeleted' => [['message' => ['id' => 'tmp']], ['message' => ['id' => 'old']]]],
+                ['id' => '15', 'messagesAdded' => [['message' => ['id' => 'new1']]]],
+            ],
+            'historyId' => '20',
+            'nextPageToken' => 'more',
+        ])])->listChanges($this->connectedAccount(), '10', 'page-1');
+
+        $this->assertSame(['new1', 'lab1', 'lab2'], $page->changedIds);
+        $this->assertSame(['tmp', 'old'], $page->deletedIds);
+        $this->assertSame('20', $page->historyId);
+        $this->assertSame('more', $page->nextPageToken);
+
+        $query = $this->queryOf((string) $this->history[0]['request']->getUri());
+        $this->assertSame('10', $query['startHistoryId']);
+        $this->assertSame('page-1', $query['pageToken']);
+    }
+
+    public function test_history_404_throws_history_expired(): void
+    {
+        $this->expectException(HistoryExpired::class);
+
+        $this->service([$this->jsonResponse(['error' => ['code' => 404, 'message' => 'Requested entity was not found.']], 404)])
+            ->listChanges($this->connectedAccount(), '1');
+    }
+
+    public function test_rate_limit_throws_provider_unavailable(): void
+    {
+        try {
+            $this->service([$this->jsonResponse(['error' => ['code' => 429, 'message' => 'Rate Limit Exceeded']], 429)])
+                ->listMessageIds($this->connectedAccount(), 'after:1');
+            $this->fail('Expected ProviderUnavailable');
+        } catch (ProviderUnavailable $e) {
+            $this->assertSame('http_429', $e->getMessage());
+        }
+    }
+
+    public function test_network_failure_throws_provider_unavailable(): void
+    {
+        $this->expectException(ProviderUnavailable::class);
+        $this->expectExceptionMessage('request_failed');
+
+        $this->service([new ConnectException('down', new Request('GET', 'x'))])
+            ->currentHistoryId($this->connectedAccount());
+    }
+
+    public function test_unauthorized_marks_account_for_reauth(): void
+    {
+        $account = $this->connectedAccount();
+
+        try {
+            $this->service([$this->jsonResponse(['error' => ['code' => 401, 'message' => 'Invalid Credentials']], 401)])
+                ->listChanges($account, '1');
+            $this->fail('Expected ReauthorizationRequired');
+        } catch (ReauthorizationRequired) {
+            $this->assertNotNull($account->fresh()->reauth_required_at);
+        }
+    }
+
+    public function test_refreshes_expired_token_before_listing(): void
+    {
+        $account = EmailAccount::factory()->create(['token_expires_at' => now()->subMinute()]);
+
+        $this->service([
+            $this->tokenResponse(['access_token' => 'refreshed-access']),
+            $this->jsonResponse(['messages' => []]),
+        ])->listMessageIds($account, 'after:1');
+
+        $this->assertSame('Bearer refreshed-access', $this->history[1]['request']->getHeaderLine('Authorization'));
     }
 }

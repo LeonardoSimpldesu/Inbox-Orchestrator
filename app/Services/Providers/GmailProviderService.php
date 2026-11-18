@@ -3,13 +3,18 @@
 namespace App\Services\Providers;
 
 use App\Contracts\EmailProviderInterface;
+use App\Exceptions\HistoryExpired;
 use App\Exceptions\MissingRequiredScopes;
 use App\Exceptions\OAuthExchangeFailed;
+use App\Exceptions\ProviderUnavailable;
 use App\Exceptions\ReauthorizationRequired;
 use App\Models\EmailAccount;
 use Carbon\CarbonImmutable;
 use Google\Client;
+use Google\Http\Batch;
+use Google\Service\Exception as GoogleServiceException;
 use Google\Service\Gmail;
+use Google\Service\Gmail\Message;
 use GuzzleHttp\ClientInterface;
 use Illuminate\Support\Str;
 use Throwable;
@@ -22,6 +27,10 @@ class GmailProviderService implements EmailProviderInterface
     ];
 
     private const REFRESH_LEEWAY_SECONDS = 60;
+
+    private const BATCH_SIZE = 100;
+
+    private const METADATA_HEADERS = ['From', 'Subject', 'List-Unsubscribe', 'List-Unsubscribe-Post'];
 
     public function __construct(private readonly ?ClientInterface $http = null) {}
 
@@ -102,6 +111,155 @@ class GmailProviderService implements EmailProviderInterface
         } catch (Throwable) {
             return false;
         }
+    }
+
+    public function currentHistoryId(EmailAccount $account): string
+    {
+        $gmail = $this->gmail($account);
+
+        return (string) $this->call($account, fn () => $gmail->users->getProfile('me')->getHistoryId());
+    }
+
+    public function listMessageIds(EmailAccount $account, string $query, ?string $pageToken = null, int $maxResults = 100): MessagePage
+    {
+        $gmail = $this->gmail($account);
+        $params = array_filter(['q' => $query, 'pageToken' => $pageToken, 'maxResults' => $maxResults]);
+
+        $response = $this->call($account, fn () => $gmail->users_messages->listUsersMessages('me', $params));
+
+        return new MessagePage(
+            ids: array_map(fn (Message $message) => $message->getId(), $response->getMessages() ?? []),
+            nextPageToken: $response->getNextPageToken(),
+        );
+    }
+
+    public function fetchMetadata(EmailAccount $account, array $ids): array
+    {
+        $messages = [];
+
+        foreach (array_chunk($ids, self::BATCH_SIZE) as $chunk) {
+            $gmail = $this->gmail($account);
+            $gmail->getClient()->setUseBatch(true);
+            $batch = new Batch($gmail->getClient(), false, $gmail->rootUrl, $gmail->batchPath);
+
+            foreach ($chunk as $id) {
+                $batch->add($gmail->users_messages->get('me', $id, [
+                    'format' => 'metadata',
+                    'metadataHeaders' => self::METADATA_HEADERS,
+                ]), $id);
+            }
+
+            $responses = $this->call($account, fn () => $batch->execute()) ?? [];
+
+            foreach ($chunk as $id) {
+                $response = $responses['response-'.$id] ?? null;
+
+                if ($response instanceof GoogleServiceException && $response->getCode() !== 404) {
+                    throw new ProviderUnavailable('http_'.$response->getCode());
+                }
+
+                if ($response instanceof Message) {
+                    $messages[] = $this->toMetadata($response);
+                }
+            }
+        }
+
+        return $messages;
+    }
+
+    public function listChanges(EmailAccount $account, string $startHistoryId, ?string $pageToken = null): ChangePage
+    {
+        $gmail = $this->gmail($account);
+        $params = array_filter([
+            'startHistoryId' => $startHistoryId,
+            'pageToken' => $pageToken,
+            'historyTypes' => ['messageAdded', 'messageDeleted', 'labelAdded', 'labelRemoved'],
+        ]);
+
+        try {
+            $response = $this->call($account, fn () => $gmail->users_history->listUsersHistory('me', $params), rethrow404: true);
+        } catch (GoogleServiceException) {
+            throw new HistoryExpired('history_expired');
+        }
+
+        $changed = [];
+        $deleted = [];
+
+        foreach ($response->getHistory() ?? [] as $record) {
+            foreach ([...($record->getMessagesAdded() ?? []), ...($record->getLabelsAdded() ?? []), ...($record->getLabelsRemoved() ?? [])] as $change) {
+                $changed[$change->getMessage()->getId()] = true;
+            }
+
+            foreach ($record->getMessagesDeleted() ?? [] as $change) {
+                $deleted[$change->getMessage()->getId()] = true;
+            }
+        }
+
+        return new ChangePage(
+            changedIds: array_keys(array_diff_key($changed, $deleted)),
+            deletedIds: array_map('strval', array_keys($deleted)),
+            historyId: (string) $response->getHistoryId(),
+            nextPageToken: $response->getNextPageToken(),
+        );
+    }
+
+    private function gmail(EmailAccount $account): Gmail
+    {
+        $client = $this->client();
+        $client->setAccessToken([
+            'access_token' => $this->refreshAccessToken($account),
+            'expires_in' => 3600,
+            'created' => time(),
+        ]);
+
+        return new Gmail($client);
+    }
+
+    /**
+     * @template T
+     *
+     * @param  callable(): T  $call
+     * @return T
+     */
+    private function call(EmailAccount $account, callable $call, bool $rethrow404 = false): mixed
+    {
+        try {
+            return $call();
+        } catch (GoogleServiceException $e) {
+            if ($rethrow404 && $e->getCode() === 404) {
+                throw $e;
+            }
+
+            if ($e->getCode() === 401) {
+                $account->forceFill(['reauth_required_at' => now()])->save();
+
+                throw new ReauthorizationRequired('unauthorized', previous: $e);
+            }
+
+            throw new ProviderUnavailable('http_'.$e->getCode(), previous: $e);
+        } catch (Throwable $e) {
+            throw new ProviderUnavailable('request_failed', previous: $e);
+        }
+    }
+
+    private function toMetadata(Message $message): MessageMetadata
+    {
+        $headers = [];
+
+        foreach ($message->getPayload()?->getHeaders() ?? [] as $header) {
+            $headers[Str::lower($header->getName())] ??= $header->getValue();
+        }
+
+        return new MessageMetadata(
+            id: $message->getId(),
+            threadId: (string) $message->getThreadId(),
+            labelIds: array_values($message->getLabelIds() ?? []),
+            internalDate: CarbonImmutable::createFromTimestampMs((int) $message->getInternalDate()),
+            from: $headers['from'] ?? null,
+            subject: $headers['subject'] ?? null,
+            listUnsubscribe: $headers['list-unsubscribe'] ?? null,
+            listUnsubscribePost: $headers['list-unsubscribe-post'] ?? null,
+        );
     }
 
     private function client(): Client
