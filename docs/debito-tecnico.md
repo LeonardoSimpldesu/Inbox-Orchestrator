@@ -12,6 +12,8 @@ Itens conhecidos que ficaram para depois. Cada um traz o impacto, onde está e u
 | 6 | Título da aba vazio nas páginas internas | UX | Baixa |
 | 7 | Acesso ao Gmail expira a cada 7 dias (app do Google em modo Teste) | UX / operação | Alta antes de uso diário |
 | 8 | Contas Gmail desconectadas guardadas para sempre | Privacidade / limpeza | Média |
+| 9 | `user:delete` não revoga o acesso ao Gmail no Google | Segurança (higiene) | Baixa |
+| 10 | Sessão expirada durante o consentimento do Google gera erro de validação | UX | Baixa |
 
 ---
 
@@ -99,3 +101,24 @@ Mesmo sem a expiração semanal, o refresh token ainda pode ser invalidado (senh
 **Onde:** `EmailAccountController::destroy`, `email_accounts.deleted_at`.
 
 **Sugestão:** comando agendado (ex.: `inbox:purge-disconnected-accounts`, diário) que faz `forceDelete()` das contas desconectadas há mais de N dias (ex.: 90; configurável), apagando em cascata os dados ligados. Mostrar o prazo na mensagem de desconexão.
+
+## 9. `user:delete` não revoga o acesso ao Gmail no Google
+
+**Origem:** conexão Gmail (2026-11-18).
+
+**O que acontece:** `php artisan user:delete` apaga o usuário e, em cascata, as contas Gmail (inclusive tokens). O app perde os tokens, mas a autorização continua listada em "Apps com acesso à sua conta" do Google até expirar ou ser removida pela pessoa.
+
+**Onde:** `app/Console/Commands/DeleteUserCommand.php`.
+
+**Sugestão:** antes de apagar, chamar `EmailProviderInterface::revoke()` para cada conta ativa do usuário (falhas só geram aviso, como no "Desconectar"). Teste com o `FakeEmailProvider`.
+
+## 10. Sessão expirada durante o consentimento do Google gera erro de validação
+
+**Origem:** conexão Gmail (2026-11-18).
+
+**O que acontece:** se a sessão expira enquanto a pessoa está na tela do Google, a volta pede login. Depois do login ela cai no callback sem o `state` na sessão e vê "Não foi possível validar a resposta do Google. Tente novamente.". Basta conectar de novo, mas a mensagem não explica o motivo.
+
+**Onde:** `EmailAccountController::callback`.
+
+**Sugestão:** quando não houver `state` na sessão (em vez de um `state` diferente), mostrar "Sua sessão expirou durante a conexão. Clique em Conectar conta Gmail de novo.".
+

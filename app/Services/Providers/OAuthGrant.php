@@ -16,12 +16,4 @@ final readonly class OAuthGrant
         public array $grantedScopes,
         public string $email,
     ) {}
-
-    /**
-     * @param  list<string>  $required
-     */
-    public function hasScopes(array $required): bool
-    {
-        return array_diff($required, $this->grantedScopes) === [];
-    }
 }

@@ -3,10 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Contracts\EmailProviderInterface;
+use App\Exceptions\MissingRequiredScopes;
 use App\Exceptions\OAuthExchangeFailed;
 use App\Jobs\SyncEmailAccountJob;
 use App\Models\EmailAccount;
-use App\Services\Providers\GmailProviderService;
 use App\Services\Providers\OAuthGrant;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -62,19 +62,17 @@ class EmailAccountController extends Controller
             return $this->back(error: self::GENERIC_ERROR);
         }
 
+        // Rejected grants are discarded without revoking: the grant is shared by
+        // every token of this Google account, so revoking would also cut off the
+        // user who legitimately has it connected.
         try {
             $grant = $this->provider->exchangeCode($code);
+        } catch (MissingRequiredScopes) {
+            return $this->back(error: 'Para funcionar, o Inbox Orchestrator precisa de todas as permissões pedidas. Conecte de novo e marque todas as opções.');
         } catch (OAuthExchangeFailed $e) {
             Log::warning('Gmail OAuth code exchange failed.', ['error' => $e->getMessage()]);
 
             return $this->back(error: self::GENERIC_ERROR);
-        }
-
-        // Rejected grants are discarded without revoking: the grant is shared by
-        // every token of this Google account, so revoking would also cut off the
-        // user who legitimately has it connected.
-        if (! $grant->hasScopes(GmailProviderService::SCOPES)) {
-            return $this->back(error: 'Para funcionar, o Inbox Orchestrator precisa de todas as permissões pedidas. Conecte de novo e marque todas as opções.');
         }
 
         if ($grant->refreshToken === null) {

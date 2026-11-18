@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Accounts;
 
+use App\Exceptions\MissingRequiredScopes;
 use App\Exceptions\OAuthExchangeFailed;
 use App\Jobs\SyncEmailAccountJob;
 use App\Models\EmailAccount;
@@ -138,13 +139,15 @@ class ConnectAccountTest extends AccountsTestCase
 
     public function test_missing_scopes_rejected_without_revoking(): void
     {
-        $this->provider->grant = FakeEmailProvider::grantFor('a@gmail.com', ['grantedScopes' => ['https://www.googleapis.com/auth/gmail.modify']]);
+        Log::spy();
+        $this->provider->exchangeException = new MissingRequiredScopes('missing_scopes');
 
         $this->hitCallback(User::factory()->create(), ['state' => self::STATE, 'code' => 'c'])
             ->assertSessionHas('error', 'Para funcionar, o Inbox Orchestrator precisa de todas as permissões pedidas. Conecte de novo e marque todas as opções.');
 
         $this->assertSame(0, EmailAccount::count());
         $this->assertSame([], $this->provider->revoked);
+        Log::shouldNotHaveReceived('warning');
     }
 
     public function test_missing_refresh_token_rejected(): void

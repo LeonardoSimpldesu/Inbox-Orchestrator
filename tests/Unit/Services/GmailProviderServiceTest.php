@@ -3,6 +3,7 @@
 namespace Tests\Unit\Services;
 
 use App\Contracts\EmailProviderInterface;
+use App\Exceptions\MissingRequiredScopes;
 use App\Exceptions\OAuthExchangeFailed;
 use App\Exceptions\ReauthorizationRequired;
 use App\Models\EmailAccount;
@@ -108,8 +109,7 @@ class GmailProviderServiceTest extends TestCase
         $this->assertSame('new-refresh-token', $grant->refreshToken);
         $this->assertSame('foo@gmail.com', $grant->email);
         $this->assertSame(now()->addSeconds(3599)->timestamp, $grant->expiresAt->timestamp);
-        $this->assertTrue($grant->hasScopes(GmailProviderService::SCOPES));
-        $this->assertFalse($grant->hasScopes([...GmailProviderService::SCOPES, 'https://www.googleapis.com/auth/drive']));
+        $this->assertSame(GmailProviderService::SCOPES, $grant->grantedScopes);
 
         $this->assertStringContainsString('code=auth-code', (string) $this->history[0]['request']->getBody());
         $this->assertSame('Bearer new-access-token', $this->history[1]['request']->getHeaderLine('Authorization'));
@@ -135,6 +135,18 @@ class GmailProviderServiceTest extends TestCase
         } catch (OAuthExchangeFailed $e) {
             $this->assertSame('invalid_grant', $e->getMessage());
             $this->assertStringNotContainsString('secret-auth-code', $e->getMessage());
+        }
+    }
+
+    public function test_exchange_code_with_missing_scopes_throws_before_reading_profile(): void
+    {
+        try {
+            $this->service([$this->tokenResponse(['scope' => 'https://www.googleapis.com/auth/gmail.send'])])
+                ->exchangeCode('auth-code');
+            $this->fail('Expected MissingRequiredScopes');
+        } catch (MissingRequiredScopes $e) {
+            $this->assertSame('missing_scopes', $e->getMessage());
+            $this->assertCount(1, $this->history);
         }
     }
 

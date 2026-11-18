@@ -2,6 +2,7 @@
 
 namespace App\Contracts;
 
+use App\Exceptions\MissingRequiredScopes;
 use App\Exceptions\OAuthExchangeFailed;
 use App\Exceptions\ReauthorizationRequired;
 use App\Models\EmailAccount;
@@ -12,6 +13,7 @@ interface EmailProviderInterface
     public function authorizationUrl(string $state, ?string $loginHint = null): string;
 
     /**
+     * @throws MissingRequiredScopes when the user unticked a required permission
      * @throws OAuthExchangeFailed
      */
     public function exchangeCode(string $code): OAuthGrant;

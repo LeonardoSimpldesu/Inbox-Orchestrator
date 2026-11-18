@@ -3,6 +3,7 @@
 namespace App\Services\Providers;
 
 use App\Contracts\EmailProviderInterface;
+use App\Exceptions\MissingRequiredScopes;
 use App\Exceptions\OAuthExchangeFailed;
 use App\Exceptions\ReauthorizationRequired;
 use App\Models\EmailAccount;
@@ -43,6 +44,12 @@ class GmailProviderService implements EmailProviderInterface
     {
         $client = $this->client();
         $token = $this->request(fn () => $client->fetchAccessTokenWithAuthCode($code));
+        $grantedScopes = explode(' ', (string) ($token['scope'] ?? ''));
+
+        // Checked before reading the profile: without gmail.modify that call fails too.
+        if (array_diff(self::SCOPES, $grantedScopes) !== []) {
+            throw new MissingRequiredScopes('missing_scopes');
+        }
 
         try {
             $email = (new Gmail($client))->users->getProfile('me')->getEmailAddress();
@@ -54,7 +61,7 @@ class GmailProviderService implements EmailProviderInterface
             accessToken: $token['access_token'],
             refreshToken: $token['refresh_token'] ?? null,
             expiresAt: CarbonImmutable::now()->addSeconds((int) $token['expires_in']),
-            grantedScopes: explode(' ', (string) ($token['scope'] ?? '')),
+            grantedScopes: $grantedScopes,
             email: Str::lower($email),
         );
     }
