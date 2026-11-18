@@ -16,6 +16,8 @@ use Google\Service\Exception as GoogleServiceException;
 use Google\Service\Gmail;
 use Google\Service\Gmail\Message;
 use GuzzleHttp\ClientInterface;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -28,7 +30,22 @@ class GmailProviderService implements EmailProviderInterface
 
     private const REFRESH_LEEWAY_SECONDS = 60;
 
-    private const BATCH_SIZE = 100;
+    /**
+     * Small batches plus a per-account units-per-minute budget and a retry with
+     * backoff for rate-limited items keep us under Gmail's per-user quotas.
+     */
+    private const BATCH_SIZE = 25;
+
+    /** Gmail API quota units per method. */
+    private const COST_GET_PROFILE = 1;
+
+    private const COST_HISTORY_LIST = 2;
+
+    private const COST_MESSAGES_LIST = 5;
+
+    private const COST_MESSAGES_GET = 5;
+
+    private const RATE_LIMIT_RETRIES = 3;
 
     private const METADATA_HEADERS = ['From', 'Subject', 'List-Unsubscribe', 'List-Unsubscribe-Post'];
 
@@ -117,7 +134,7 @@ class GmailProviderService implements EmailProviderInterface
     {
         $gmail = $this->gmail($account);
 
-        return (string) $this->call($account, fn () => $gmail->users->getProfile('me')->getHistoryId());
+        return (string) $this->call($account, fn () => $gmail->users->getProfile('me')->getHistoryId(), self::COST_GET_PROFILE);
     }
 
     public function listMessageIds(EmailAccount $account, string $query, ?string $pageToken = null, int $maxResults = 100): MessagePage
@@ -125,7 +142,7 @@ class GmailProviderService implements EmailProviderInterface
         $gmail = $this->gmail($account);
         $params = array_filter(['q' => $query, 'pageToken' => $pageToken, 'maxResults' => $maxResults]);
 
-        $response = $this->call($account, fn () => $gmail->users_messages->listUsersMessages('me', $params));
+        $response = $this->call($account, fn () => $gmail->users_messages->listUsersMessages('me', $params), self::COST_MESSAGES_LIST);
 
         return new MessagePage(
             ids: array_map(fn (Message $message) => $message->getId(), $response->getMessages() ?? []),
@@ -138,33 +155,61 @@ class GmailProviderService implements EmailProviderInterface
         $messages = [];
 
         foreach (array_chunk($ids, self::BATCH_SIZE) as $chunk) {
-            $gmail = $this->gmail($account);
-            $gmail->getClient()->setUseBatch(true);
-            $batch = new Batch($gmail->getClient(), false, $gmail->rootUrl, $gmail->batchPath);
+            $attempt = 0;
 
-            foreach ($chunk as $id) {
-                $batch->add($gmail->users_messages->get('me', $id, [
-                    'format' => 'metadata',
-                    'metadataHeaders' => self::METADATA_HEADERS,
-                ]), $id);
-            }
+            while ($chunk !== []) {
+                $rateLimited = [];
 
-            $responses = $this->call($account, fn () => $batch->execute()) ?? [];
-
-            foreach ($chunk as $id) {
-                $response = $responses['response-'.$id] ?? null;
-
-                if ($response instanceof GoogleServiceException && $response->getCode() !== 404) {
-                    throw new ProviderUnavailable('http_'.$response->getCode());
+                foreach ($this->executeBatch($account, $chunk) as $id => $response) {
+                    if ($response instanceof Message) {
+                        $messages[$id] = $this->toMetadata($response);
+                    } elseif ($response !== null && $this->isRateLimit($response)) {
+                        $rateLimited[] = $id;
+                    } elseif ($response !== null && $response->getCode() !== 404) {
+                        throw new ProviderUnavailable('http_'.$response->getCode());
+                    }
                 }
 
-                if ($response instanceof Message) {
-                    $messages[] = $this->toMetadata($response);
+                if ($rateLimited !== [] && $attempt === self::RATE_LIMIT_RETRIES) {
+                    throw new ProviderUnavailable('rate_limited');
                 }
+
+                if ($rateLimited !== []) {
+                    Sleep::for(2 ** $attempt++)->seconds();
+                }
+
+                $chunk = $rateLimited;
             }
         }
 
-        return $messages;
+        return array_values(array_filter(array_map(fn (string $id) => $messages[$id] ?? null, $ids)));
+    }
+
+    /**
+     * @param  list<string>  $ids
+     * @return array<string, Message|GoogleServiceException|null> keyed by message id
+     */
+    private function executeBatch(EmailAccount $account, array $ids): array
+    {
+        $gmail = $this->gmail($account);
+        $gmail->getClient()->setUseBatch(true);
+        $batch = new Batch($gmail->getClient(), false, $gmail->rootUrl, $gmail->batchPath);
+
+        foreach ($ids as $id) {
+            $batch->add($gmail->users_messages->get('me', $id, [
+                'format' => 'metadata',
+                'metadataHeaders' => self::METADATA_HEADERS,
+            ]), $id);
+        }
+
+        $responses = $this->call($account, fn () => $batch->execute(), self::COST_MESSAGES_GET * count($ids)) ?? [];
+        $byId = [];
+
+        foreach ($ids as $id) {
+            $byId[$id] = $responses['response-'.$id] ?? null;
+        }
+
+        return $byId;
     }
 
     public function listChanges(EmailAccount $account, string $startHistoryId, ?string $pageToken = null): ChangePage
@@ -177,7 +222,7 @@ class GmailProviderService implements EmailProviderInterface
         ]);
 
         try {
-            $response = $this->call($account, fn () => $gmail->users_history->listUsersHistory('me', $params), rethrow404: true);
+            $response = $this->call($account, fn () => $gmail->users_history->listUsersHistory('me', $params), self::COST_HISTORY_LIST, rethrow404: true);
         } catch (GoogleServiceException) {
             throw new HistoryExpired('history_expired');
         }
@@ -221,13 +266,19 @@ class GmailProviderService implements EmailProviderInterface
      * @param  callable(): T  $call
      * @return T
      */
-    private function call(EmailAccount $account, callable $call, bool $rethrow404 = false): mixed
+    private function call(EmailAccount $account, callable $call, int $cost, bool $rethrow404 = false): mixed
     {
+        $this->throttle($account, $cost);
+
         try {
             return $call();
         } catch (GoogleServiceException $e) {
             if ($rethrow404 && $e->getCode() === 404) {
                 throw $e;
+            }
+
+            if ($this->isRateLimit($e)) {
+                throw new ProviderUnavailable('rate_limited', previous: $e);
             }
 
             if ($e->getCode() === 401) {
@@ -240,6 +291,37 @@ class GmailProviderService implements EmailProviderInterface
         } catch (Throwable $e) {
             throw new ProviderUnavailable('request_failed', previous: $e);
         }
+    }
+
+    /**
+     * Waits for the next minute when this call would exceed the account's
+     * configured quota units per minute.
+     */
+    private function throttle(EmailAccount $account, int $cost): void
+    {
+        $key = 'gmail-quota:'.$account->id;
+        $limit = max($cost, (int) config('services.google.quota_units_per_minute'));
+
+        if (RateLimiter::attempts($key) + $cost > $limit) {
+            Sleep::for(max(1, RateLimiter::availableIn($key)))->seconds();
+            RateLimiter::clear($key);
+        }
+
+        RateLimiter::increment($key, 60, $cost);
+    }
+
+    /**
+     * Gmail reports quota exhaustion as 429 or as 403 with a rate-limit reason.
+     */
+    private function isRateLimit(GoogleServiceException $e): bool
+    {
+        if ($e->getCode() === 429) {
+            return true;
+        }
+
+        $reasons = array_column($e->getErrors() ?? [], 'reason');
+
+        return $e->getCode() === 403 && array_intersect(['rateLimitExceeded', 'userRateLimitExceeded'], $reasons) !== [];
     }
 
     private function toMetadata(Message $message): MessageMetadata

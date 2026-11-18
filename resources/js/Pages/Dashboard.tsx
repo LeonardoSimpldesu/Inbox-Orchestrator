@@ -2,7 +2,7 @@ import type { EmailAccountSummary, RetentionRuleSummary } from '@/types';
 import { Link } from '@inertiajs/react';
 import AppLayout from '../Layouts/AppLayout';
 import AccountStatusBadge from '@/Components/AccountStatusBadge';
-import { connectGmail } from '@/lib/gmail';
+import { connectGmail, syncAllAccounts, timeAgo } from '@/lib/gmail';
 import { 
     Mail, 
     Trash2, 
@@ -54,7 +54,7 @@ export default function Dashboard({ accounts, stats, recentRules }: DashboardPro
 
                     <button 
                         type="button"
-                        onClick={() => alert('Disparando sincronização em background...')}
+                        onClick={() => syncAllAccounts()}
                         className="inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold px-3 py-2.5 rounded-xl border border-slate-700 transition cursor-pointer"
                         title="Sincronizar metadados agora"
                     >
@@ -167,7 +167,7 @@ export default function Dashboard({ accounts, stats, recentRules }: DashboardPro
                                             </div>
                                             <div>
                                                 <div className="text-sm font-medium text-slate-200">{acc.account_email}</div>
-                                                <div className="text-xs text-slate-500">Última sinc: {acc.last_synced_at || 'Nunca'}</div>
+                                                <div className="text-xs text-slate-500">Última sinc.: {acc.last_synced_at ? timeAgo(acc.last_synced_at) : 'nunca'}</div>
                                             </div>
                                         </div>
                                         <AccountStatusBadge account={acc} />

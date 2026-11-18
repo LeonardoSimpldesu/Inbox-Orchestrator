@@ -34,6 +34,9 @@ return [
         'redirect' => env('GOOGLE_REDIRECT_URI', rtrim((string) env('APP_URL', 'http://localhost'), '/').'/accounts/google/callback'),
         // Apps in Google's "Testing" status get refresh tokens that expire after 7 days.
         'testing' => (bool) env('GOOGLE_OAUTH_TESTING', true),
+        // Gmail API quota units each account may spend per minute (Cloud Console:
+        // Gmail API > Quotas > "Units per minute per user"). Kept below Google's limit.
+        'quota_units_per_minute' => (int) env('GMAIL_QUOTA_UNITS_PER_MINUTE', 1200),
     ],
 
     'slack' => [

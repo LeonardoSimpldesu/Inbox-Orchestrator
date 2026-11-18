@@ -8,6 +8,7 @@ use App\Exceptions\OAuthExchangeFailed;
 use App\Jobs\SyncEmailAccountJob;
 use App\Models\EmailAccount;
 use App\Services\Providers\OAuthGrant;
+use App\Services\Sync\SyncMode;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -103,6 +104,32 @@ class EmailAccountController extends Controller
         $emailAccount->delete();
 
         return $this->back(success: "Conta {$emailAccount->account_email} desconectada. Os dados ficam guardados se você reconectar.");
+    }
+
+    public function importHistory(Request $request, string $account): RedirectResponse
+    {
+        $emailAccount = $request->user()->emailAccounts()->findOrFail($account);
+
+        if ($emailAccount->needsReauth()) {
+            return $this->back(error: 'Reconecte a conta antes de importar o histórico.');
+        }
+
+        SyncEmailAccountJob::dispatch($emailAccount->id, SyncMode::HistoryNow);
+
+        return $this->back(success: 'Importação do histórico iniciada. Pode levar até 20 minutos.');
+    }
+
+    public function syncAll(Request $request): RedirectResponse
+    {
+        $accounts = $request->user()->emailAccounts()->syncable()->get()->reject->needsReauth();
+
+        if ($accounts->isEmpty()) {
+            return back()->with('error', 'Nenhuma conta conectada para sincronizar.');
+        }
+
+        $accounts->each(fn (EmailAccount $account) => SyncEmailAccountJob::dispatch($account->id, SyncMode::Changes));
+
+        return back()->with('success', 'Sincronização iniciada.');
     }
 
     /**

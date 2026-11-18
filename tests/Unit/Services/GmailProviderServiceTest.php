@@ -16,6 +16,7 @@ use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
+use Illuminate\Support\Sleep;
 use Psr\Http\Message\RequestInterface;
 use Tests\TestCase;
 
@@ -328,11 +329,10 @@ class GmailProviderServiceTest extends TestCase
         $this->assertNull($page->nextPageToken);
     }
 
-    public function test_fetch_metadata_uses_one_batch_request_per_100_ids(): void
+    public function test_fetch_metadata_uses_one_batch_request_per_25_ids(): void
     {
         $ids = array_map(fn ($i) => "m{$i}", range(1, 150));
-        $first = array_fill_keys(array_slice($ids, 0, 100), null);
-        $second = array_fill_keys(array_slice($ids, 100), null);
+        $chunks = array_map(fn ($chunk) => array_fill_keys($chunk, null), array_chunk($ids, 25));
         $part = fn ($id) => ['status' => 200, 'body' => $this->gmailMessage($id, [
             'From' => '"News" <news@site.com>',
             'subject' => 'Oferta',
@@ -340,12 +340,12 @@ class GmailProviderServiceTest extends TestCase
             'List-Unsubscribe-Post' => 'List-Unsubscribe=One-Click',
         ])];
 
-        $messages = $this->service([
-            $this->batchResponse(array_combine(array_keys($first), array_map($part, array_keys($first)))),
-            $this->batchResponse(array_combine(array_keys($second), array_map($part, array_keys($second)))),
-        ])->fetchMetadata($this->connectedAccount(), $ids);
+        $messages = $this->service(array_map(
+            fn ($chunk) => $this->batchResponse(array_combine(array_keys($chunk), array_map($part, array_keys($chunk)))),
+            $chunks,
+        ))->fetchMetadata($this->connectedAccount(), $ids);
 
-        $this->assertCount(2, $this->history);
+        $this->assertCount(6, $this->history);
         $this->assertSame('https://gmail.googleapis.com/batch', (string) $this->history[0]['request']->getUri());
         $this->assertStringContainsString('format=metadata', (string) $this->history[0]['request']->getBody());
         $this->assertStringContainsString('metadataHeaders=List-Unsubscribe-Post', (string) $this->history[0]['request']->getBody());
@@ -379,13 +379,110 @@ class GmailProviderServiceTest extends TestCase
         $this->assertCount(0, $this->history);
     }
 
-    public function test_fetch_metadata_rate_limited_item_throws_provider_unavailable(): void
+    public function test_rate_limited_items_are_retried_after_a_pause(): void
+    {
+        Sleep::fake();
+        $limited = ['status' => 429, 'body' => ['error' => ['code' => 429, 'message' => 'Too many concurrent requests for user']]];
+
+        $messages = $this->service([
+            $this->batchResponse(['m1' => $limited, 'm2' => ['status' => 200, 'body' => $this->gmailMessage('m2')]]),
+            $this->batchResponse(['m1' => $limited]),
+            $this->batchResponse(['m1' => ['status' => 200, 'body' => $this->gmailMessage('m1')]]),
+        ])->fetchMetadata($this->connectedAccount(), ['m1', 'm2']);
+
+        $this->assertSame(['m1', 'm2'], array_map(fn ($m) => $m->id, $messages));
+        $this->assertCount(3, $this->history);
+        $this->assertStringNotContainsString('/m2', (string) $this->history[1]['request']->getBody());
+        Sleep::assertSequence([Sleep::for(1)->seconds(), Sleep::for(2)->seconds()]);
+    }
+
+    public function test_items_still_rate_limited_after_retries_throw_provider_unavailable(): void
+    {
+        Sleep::fake();
+        $limited = ['status' => 429, 'body' => ['error' => ['code' => 429, 'message' => 'Too many']]];
+
+        try {
+            $this->service(array_fill(0, 4, $this->batchResponse(['m1' => $limited])))
+                ->fetchMetadata($this->connectedAccount(), ['m1']);
+            $this->fail('Expected ProviderUnavailable');
+        } catch (ProviderUnavailable $e) {
+            $this->assertSame('rate_limited', $e->getMessage());
+            Sleep::assertSleptTimes(3);
+        }
+    }
+
+    public function test_quota_403_items_are_retried_like_429(): void
+    {
+        Sleep::fake();
+        $quota = ['status' => 403, 'body' => ['error' => ['code' => 403, 'message' => "Quota exceeded for quota metric 'Total Query Cost'", 'errors' => [['reason' => 'rateLimitExceeded', 'domain' => 'usageLimits']]]]];
+
+        $messages = $this->service([
+            $this->batchResponse(['m1' => $quota]),
+            $this->batchResponse(['m1' => ['status' => 200, 'body' => $this->gmailMessage('m1')]]),
+        ])->fetchMetadata($this->connectedAccount(), ['m1']);
+
+        $this->assertCount(1, $messages);
+        Sleep::assertSleptTimes(1);
+    }
+
+    public function test_quota_403_on_a_call_is_reported_as_rate_limited(): void
     {
         $this->expectException(ProviderUnavailable::class);
+        $this->expectExceptionMessage('rate_limited');
 
-        $this->service([$this->batchResponse([
-            'm1' => ['status' => 429, 'body' => ['error' => ['code' => 429, 'message' => 'Too many']]],
-        ])])->fetchMetadata($this->connectedAccount(), ['m1']);
+        $this->service([$this->jsonResponse(['error' => ['code' => 403, 'message' => 'Quota exceeded', 'errors' => [['reason' => 'userRateLimitExceeded']]]], 403)])
+            ->listMessageIds($this->connectedAccount(), 'after:1');
+    }
+
+    public function test_server_error_on_a_call_is_reported_with_its_code(): void
+    {
+        $this->expectException(ProviderUnavailable::class);
+        $this->expectExceptionMessage('http_500');
+
+        $this->service([$this->jsonResponse(['error' => ['code' => 500, 'message' => 'Backend Error']], 500)])
+            ->listMessageIds($this->connectedAccount(), 'after:1');
+    }
+
+    public function test_throttles_to_configured_units_per_minute(): void
+    {
+        Sleep::fake(syncWithCarbon: true);
+        config(['services.google.quota_units_per_minute' => 300]);
+        $account = $this->connectedAccount();
+        $ok = fn (array $ids) => $this->batchResponse(array_combine($ids, array_map(fn ($id) => ['status' => 200, 'body' => $this->gmailMessage($id)], $ids)));
+        $ids = array_map(fn ($i) => "m{$i}", range(1, 75));
+
+        $this->service([$ok(array_slice($ids, 0, 25)), $ok(array_slice($ids, 25, 25)), $ok(array_slice($ids, 50, 25))])
+            ->fetchMetadata($account, $ids);
+
+        Sleep::assertSleptTimes(1);
+        $this->assertCount(3, $this->history);
+    }
+
+    public function test_quota_budget_is_per_account(): void
+    {
+        Sleep::fake();
+        config(['services.google.quota_units_per_minute' => 10]);
+
+        $this->service([$this->jsonResponse(['messages' => []]), $this->jsonResponse(['messages' => []])])
+            ->listMessageIds($this->connectedAccount(), 'after:1');
+        $this->service([$this->jsonResponse(['messages' => []])])
+            ->listMessageIds($this->connectedAccount(), 'after:1');
+
+        Sleep::assertNeverSlept();
+    }
+
+    public function test_other_item_errors_throw_without_retrying(): void
+    {
+        Sleep::fake();
+        $this->expectException(ProviderUnavailable::class);
+        $this->expectExceptionMessage('http_500');
+
+        try {
+            $this->service([$this->batchResponse(['m1' => ['status' => 500, 'body' => ['error' => ['code' => 500, 'message' => 'Backend']]]])])
+                ->fetchMetadata($this->connectedAccount(), ['m1']);
+        } finally {
+            Sleep::assertNeverSlept();
+        }
     }
 
     public function test_list_changes_collects_changed_and_deleted_ids(): void
@@ -427,7 +524,7 @@ class GmailProviderServiceTest extends TestCase
                 ->listMessageIds($this->connectedAccount(), 'after:1');
             $this->fail('Expected ProviderUnavailable');
         } catch (ProviderUnavailable $e) {
-            $this->assertSame('http_429', $e->getMessage());
+            $this->assertSame('rate_limited', $e->getMessage());
         }
     }
 

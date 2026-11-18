@@ -1,10 +1,12 @@
-import { router } from '@inertiajs/react';
-import { Info, Mail, Plus, RefreshCw, Unlink } from 'lucide-react';
+import { useEffect } from 'react';
+import { router, usePoll } from '@inertiajs/react';
+import { History, Info, Mail, Plus, RefreshCw, Unlink } from 'lucide-react';
 import type { EmailAccountSummary } from '@/types';
 import AppLayout from '@/Layouts/AppLayout';
 import AccountStatusBadge from '@/Components/AccountStatusBadge';
+import AccountSyncProgress from '@/Components/AccountSyncProgress';
 import PrimaryButton from '@/Components/PrimaryButton';
-import { connectGmail } from '@/lib/gmail';
+import { connectGmail, importHistory } from '@/lib/gmail';
 
 interface AccountsIndexProps {
     accounts: EmailAccountSummary[];
@@ -22,6 +24,19 @@ function disconnect(account: EmailAccountSummary): void {
 }
 
 export default function AccountsIndex({ accounts, testingMode }: AccountsIndexProps) {
+    const importingRecent = accounts.some((account) => account.sync.state === 'importing_recent');
+    const { start, stop } = usePoll(15_000, { only: ['accounts'] }, { autoStart: false });
+
+    useEffect(() => {
+        if (importingRecent) {
+            start();
+        } else {
+            stop();
+        }
+
+        return stop;
+    }, [importingRecent, start, stop]);
+
     return (
         <AppLayout title="Contas">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-800">
@@ -64,12 +79,23 @@ export default function AccountsIndex({ accounts, testingMode }: AccountsIndexPr
                                     </div>
                                     <div className="min-w-0">
                                         <div className="text-sm font-medium text-slate-200 truncate">{account.account_email}</div>
-                                        <div className="mt-1">
+                                        <div className="mt-1 flex flex-col gap-1">
                                             <AccountStatusBadge account={account} />
+                                            <AccountSyncProgress sync={account.sync} />
                                         </div>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    {account.sync.state === 'importing_history' && account.status === 'connected' && (
+                                        <button
+                                            type="button"
+                                            onClick={() => importHistory(account.id)}
+                                            className="inline-flex items-center gap-1.5 bg-indigo-600/90 hover:bg-indigo-600 text-white text-xs font-semibold px-3 py-2 rounded-lg transition cursor-pointer"
+                                        >
+                                            <History className="w-3.5 h-3.5" />
+                                            Importar histórico agora
+                                        </button>
+                                    )}
                                     <button
                                         type="button"
                                         onClick={() => connectGmail(account.id)}
