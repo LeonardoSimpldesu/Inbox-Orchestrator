@@ -1,66 +1,92 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Inbox Orchestrator
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Cockpit para automatizar a limpeza de caixas de e-mail: desinscrição de newsletters, regras de expiração (TTL) e organização por remetente. Uso pessoal, para o dono e algumas pessoas próximas. Não há cadastro público.
 
-## About Laravel
+Especificação completa: [`SPEC.md`](SPEC.md). Débitos conhecidos: [`docs/debito-tecnico.md`](docs/debito-tecnico.md).
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Stack
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+- Laravel 13 · PHP 8.5 · Laravel Fortify (login, reset de senha, 2FA)
+- Inertia 3 · React 19 · TypeScript (strict) · Tailwind CSS 4 · Vite 8
+- SQLite por padrão · fila e sessões no banco
+- Docker: `app` (PHP-FPM), `web` (nginx), `queue`, `scheduler`, `vite` (Node 26)
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Primeiros passos
 
-## Learning Laravel
+Pré-requisitos: Docker e Node 26 no host (para build, typecheck e testes de frontend).
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+```bash
+cp .env.example .env
+docker compose up -d --build
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+docker exec inbox_app composer install
+docker exec inbox_app php artisan key:generate
+docker exec inbox_app php artisan migrate
+npm install
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+# primeiro usuário (não existe tela de cadastro)
+docker exec -it inbox_app php artisan user:create "Seu Nome" voce@exemplo.com
+```
 
-## Laravel Sponsors
+Acesse **http://localhost:8000**. O servidor do Vite roda em `localhost:5173`.
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+As portas só aceitam conexões da própria máquina (`127.0.0.1`). Não exponha o Vite nem o app em desenvolvimento para a rede: o Vite e o Inertia DevTools servem dados sem autenticação.
 
-### Premium Partners
+## Gestão de usuários
 
-- **[Vehikl](https://vehikl.com/)**
-- **[Tighten Co.](https://tighten.co)**
-- **[WebReinvent](https://webreinvent.com/)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel/)**
-- **[Cyber-Duck](https://cyber-duck.co.uk)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Jump24](https://jump24.co.uk)**
-- **[Redberry](https://redberry.international/laravel/)**
-- **[Active Logic](https://activelogic.com)**
-- **[byte5](https://byte5.de)**
-- **[OP.GG](https://op.gg)**
+Contas são criadas e administradas pelo terminal. Todos os comandos aceitam o e-mail com maiúsculas ou espaços.
 
-## Contributing
+| Comando | O que faz |
+|---|---|
+| `php artisan user:create "Nome" email@x.com` | Cria o usuário. Pede a senha no terminal (mínimo de 12 caracteres). |
+| `php artisan user:create "Nome" email@x.com --password=...` | Cria com a senha informada. |
+| `php artisan user:create "Nome" email@x.com -n` | Modo não interativo: gera uma senha forte e mostra uma única vez. |
+| `php artisan user:disable email@x.com` | Desativa: a pessoa não consegue mais entrar, as sessões abertas caem na hora e o "lembrar-me" deixa de valer. |
+| `php artisan user:enable email@x.com` | Reativa um usuário desativado. |
+| `php artisan user:delete email@x.com` | Remove o usuário e todos os dados dele (contas de e-mail, remetentes, regras). Pede para digitar o e-mail como confirmação. |
+| `php artisan user:reset-two-factor email@x.com` | Desliga o 2FA de quem perdeu o app autenticador e os códigos de recuperação. |
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+Rode-os com `docker exec -it inbox_app php artisan ...`. `user:disable`, `user:delete` e `user:reset-two-factor` aceitam `--force` para pular a confirmação.
 
-## Code of Conduct
+## Autenticação
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+- Login com e-mail e senha, "lembrar-me" e limite de 5 tentativas por minuto.
+- Falhas sempre mostram "Credenciais inválidas.", sem revelar se a conta existe ou está desativada.
+- "Esqueci minha senha" envia um link válido por 60 minutos e sempre responde a mesma mensagem.
+- Redefinir a senha encerra as sessões abertas em outros dispositivos.
+- 2FA opcional (app autenticador) em **Segurança**, no menu superior, com códigos de recuperação de uso único.
 
-## Security Vulnerabilities
+## E-mail
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+| Ambiente | Configuração |
+|---|---|
+| Padrão | `MAIL_MAILER=log`: os e-mails vão para `storage/logs/laravel.log`. |
+| Desenvolvimento | Mailtrap (sandbox): troque os `MAIL_*` do `.env` pelos valores indicados no `.env.example` e rode `php artisan config:clear`. |
+| Produção | Resend (a habilitar): veja `.env.production.example`. |
 
-## License
+## Testes e verificações
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Rode tudo antes de qualquer merge na `main` ou pull request:
+
+```bash
+docker exec inbox_app php artisan test            # PHPUnit, inclui o audit de dependências
+docker exec inbox_app php artisan test --coverage # cobertura (meta: 100% de app/)
+npm run typecheck                                 # TypeScript strict
+npm run build                                     # build de produção
+npm run test:security                             # o Vite não pode servir arquivos sensíveis
+```
+
+- O grupo `audit` consulta as bases de vulnerabilidades do Composer e do npm e precisa de internet. Para rodar offline: `php artisan test --exclude-group=audit`.
+- Exceções temporárias de audit ficam em [`audit-allowlist.json`](audit-allowlist.json). Cada uma exige justificativa e data de expiração, e o teste falha quando ela vence.
+- Estilo do PHP: `docker exec inbox_app vendor/bin/pint --test`.
+
+## Produção
+
+Parta de [`.env.production.example`](.env.production.example): debug desligado, cookie de sessão seguro e criptografado, DevTools desligado e logs a partir de `warning`. Hospedagem alvo: VPS com nginx + PHP-FPM + Supervisor/Cron (detalhes no SPEC).
+
+## Documentação
+
+- [`SPEC.md`](SPEC.md): especificação funcional e técnica, fases do projeto.
+- [`docs/superpowers/specs/`](docs/superpowers/specs/): designs aprovados.
+- [`docs/superpowers/plans/`](docs/superpowers/plans/): planos de implementação.
+- [`docs/debito-tecnico.md`](docs/debito-tecnico.md): pendências conhecidas.

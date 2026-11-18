@@ -1,0 +1,60 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+Inbox Orchestrator: a private (owner + a few close people) Laravel + Inertia app to automate inbox hygiene (unsubscribe, TTL/retention rules, sender triage). Product spec and phases: `SPEC.md`. Approved designs and plans: `docs/superpowers/specs/`, `docs/superpowers/plans/`. Known debt: `docs/debito-tecnico.md`.
+
+## Conventions
+
+- **Code in English** (identifiers, comments, commit messages, test names). **User-facing text in pt-BR** (UI, validation/auth messages, e-mails, Artisan command output). Translations live in `lang/pt_BR/*.php` and `lang/pt_BR.json`; the default locale is `pt_BR` in `config/app.php`, so tests don't depend on `.env`.
+- **Few comments.** Only add one when it is relevant: a business rule or security decision that the code doesn't make obvious. Don't narrate what the code does.
+- Frontend is **TypeScript strict** (`.tsx`/`.ts` only). Import with the `@/` alias (`resources/js`).
+- PHP style: Laravel Pint.
+- TDD: write the failing test first, watch it fail, then implement. `app/` coverage must stay at **100%**.
+
+## Commands
+
+PHP/Composer run **inside the container** (no Composer on the host). Node runs on the host (Node 26).
+
+```bash
+docker compose up -d                                   # app, web (:8000), queue, scheduler, vite (:5173)
+docker exec inbox_app php artisan test                 # full PHPUnit suite (includes dependency audit, needs internet)
+docker exec inbox_app php artisan test --exclude-group=audit
+docker exec inbox_app php artisan test --filter=LoginTest              # single class
+docker exec inbox_app php artisan test --filter=test_recovery_code_works_only_once
+docker exec inbox_app php artisan test --coverage
+docker exec inbox_app vendor/bin/pint --test <paths>
+docker exec inbox_app php artisan migrate
+docker exec inbox_app php artisan optimize:clear       # needed after Inertia/Blade upgrades (stale compiled views)
+npm run typecheck                                      # tsc --noEmit
+npm run build
+npm run test:security                                  # node --test tests/js: Vite must not serve sensitive files
+```
+
+**Before any merge into `main` or opening a PR, run all of the above checks** (full PHPUnit incl. audit, typecheck, build, test:security), again on the merged result. After merging into `main`, push `main`.
+
+User management (no public registration): `php artisan user:create|user:disable|user:enable|user:delete|user:reset-two-factor` (see README).
+
+## Architecture
+
+### Authentication (Laravel Fortify, headless)
+- Fortify provides routes and logic; `app/Providers/FortifyServiceProvider.php` registers every Fortify view as an **Inertia page** (`Auth/*`), the rate limiters, and `Fortify::authenticateUsing` (rejects disabled users with the same generic error as a wrong password, before the 2FA challenge).
+- `config/fortify.php` enables **only** `resetPasswords` and `twoFactorAuthentication` (confirm + confirmPassword). Registration, email verification, profile/password update and passkeys are intentionally off; `tests/Feature/Auth/LoginTest` asserts those routes 404.
+- Anti-enumeration: login always fails with `Credenciais inválidas.`; `App\Http\Responses\PasswordResetLinkRequestedResponse` is bound to both the success and failure reset-link contracts so the endpoint always answers the same.
+- App routes (`routes/web.php`) use `['auth', 'auth.session', 'active']`: `auth.session` ends other sessions when the password changes; `active` (`EnsureUserIsActive`) logs out disabled users. `/settings/security` also requires `password.confirm`.
+- Disabling a user (`users.disabled_at`) = no login, no reset e-mail (`User::sendPasswordResetNotification`), sessions deleted and `remember_token` rotated (the remember-me cookie bypasses `authenticateUsing`).
+- 2FA secrets/recovery codes are hidden on `User`; the Security page fetches QR/secret/codes from Fortify's JSON endpoints on demand and never receives them as props.
+
+### Data isolation
+Every query starts from the authenticated user: `User::emailAccounts()`, `senders()` and `retentionRules()` (`hasManyThrough` via `EmailAccount`). Shared Inertia props (`HandleInertiaRequests::share`) expose only `id, name, email, two_factor_enabled, accounts`. OAuth tokens on `EmailAccount` are `encrypted` casts **and** `$hidden` (casts decrypt on serialization). Future sync/retention jobs must skip accounts of disabled users.
+
+### Frontend
+Inertia pages in `resources/js/Pages`, layouts `AppLayout` (authenticated) and `GuestLayout` (auth screens), shared inputs in `Components/`. Shared props are typed via module augmentation of `@inertiajs/core` (`InertiaConfig.sharedPageProps`) in `resources/js/types/inertia.d.ts`; domain types in `resources/js/types/index.d.ts`.
+
+### Security hardening (keep these intact)
+- Docker publishes ports on `127.0.0.1` only; `vite.config.js` restricts `server.fs.allow` to `resources/` and `node_modules/` (the dev server otherwise serves the SQLite DB, logs and source). Guarded by `tests/Security/EnvironmentHardeningTest` and `tests/js/vite-fs-exposure.test.mjs`.
+- `SecurityHeaders` middleware (Referrer-Policy, Permissions-Policy, HSTS only on HTTPS in production). `.env.production.example` is the hardened production template.
+- `tests/Security/DependencyAuditTest` (group `audit`) fails on any `composer audit`/`npm audit` advisory not in `audit-allowlist.json`; entries need a reason and an expiry date, and production npm deps can never be allowlisted.
+
+### Docker gotchas
+The `vite` container has its own `node_modules` volume (Linux native binaries for rolldown/lightningcss) and runs `npm ci` on start: restart it after changing `package-lock.json`. The host `node_modules` is macOS-only.
