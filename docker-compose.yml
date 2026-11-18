@@ -62,15 +62,20 @@ services:
     container_name: inbox_vite
     restart: unless-stopped
     working_dir: /var/www/html
-    command: npm run dev -- --host 0.0.0.0
+    command: sh -c "npm ci && npm run dev -- --host 0.0.0.0"
     ports:
       - "5173:5173"
     volumes:
       - .:/var/www/html
+      # Linux-native node_modules (rolldown/lightningcss binaries differ from the host's)
+      - vite_node_modules:/var/www/html/node_modules
     depends_on:
       - app
     networks:
       - inbox_network
+
+volumes:
+  vite_node_modules:
 
 networks:
   inbox_network:

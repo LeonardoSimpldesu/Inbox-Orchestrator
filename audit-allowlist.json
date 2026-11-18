@@ -1,0 +1,12 @@
+{
+    "$comment": "Temporary, reviewed exceptions for `composer audit` / `npm audit`. Every entry MUST have a reason and an expiry date (YYYY-MM-DD). Production npm dependencies can never be allowlisted. tests/Security/DependencyAuditTest.php fails when an entry expires or is no longer needed.",
+    "composer": [],
+    "npm": [
+        {
+            "id": "GHSA-fc5q-39xc-vjpf",
+            "package": "picomatch",
+            "reason": "ReDoS in extglob parsing. No patched release exists (advisory range <=4.0.7, latest published is 4.0.7). Only reachable through dev/build tooling (vite, laravel-vite-plugin, vite-plugin-full-reload, tinyglobby) with glob patterns from our own config, never from user input; not shipped to production.",
+            "expires": "2026-12-18"
+        }
+    ]
+}

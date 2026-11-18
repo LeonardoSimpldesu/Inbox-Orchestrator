@@ -1,7 +1,7 @@
 # Especificação Funcional e Técnica: Inbox Orchestrator
 
 **Status:** Aprovado para Desenvolvimento (MVP)  
-**Stack Principal:** Laravel 11 + Inertia.js (React + Vite) + Tailwind CSS  
+**Stack Principal:** Laravel 13 (PHP 8.5) + Inertia.js 3 (React 19 + Vite 8) + Tailwind CSS 4 — Node 26 LTS  
 **Banco de Dados:** MySQL / PostgreSQL / SQLite  
 **Driver de Fila:** Database (`php artisan queue:work`)  
 **Hospedagem Alvo:** VPS (Ubuntu/Debian com Nginx + PHP-FPM + Supervisor/Cron)
@@ -28,7 +28,7 @@ O **Inbox Orchestrator** é um cockpit de automação e higienização contínua
 └──────────────────────────────┬──────────────────────────────┘
                                │ (Inertia HTTP / JSON Props)
 ┌──────────────────────────────▼──────────────────────────────┐
-│                  Backend: Laravel 11 App                    │
+│                  Backend: Laravel 13 App                    │
 │  - Autenticação e Gestão de Usuários (Breeze / Fortify)    │
 │  - Controllers & Inertia Page Handlers                      │
 │  - Camada de Serviços e Regras de Negócio                   │
@@ -206,7 +206,7 @@ app/
 ## 6. Fases e Cronograma de Entrega
 
 * **Fase 1 (MVP Atual):**
-  - Setup Laravel 11 + Inertia + React + Tailwind + Database Queue.
+  - Setup Laravel 13 + Inertia + React + Tailwind + Database Queue.
   - Autenticação e gestão de múltiplos usuários.
   - Conexão OAuth 2.0 com Gmail e armazenamento criptografado de tokens.
   - Worker de sincronização de metadados e remetentes.

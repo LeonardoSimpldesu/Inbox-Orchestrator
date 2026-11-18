@@ -24,3 +24,4 @@ yarn-error.log
 database/database.sqlite
 database/database.sqlite-shm
 database/database.sqlite-wal
+/.playwright-mcp
