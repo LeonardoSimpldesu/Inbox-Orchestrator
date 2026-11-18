@@ -68,6 +68,33 @@ class DashboardTest extends TestCase
         );
     }
 
+    public function test_dashboard_never_exposes_oauth_tokens(): void
+    {
+        $user = User::factory()->create();
+
+        EmailAccount::create([
+            'user_id' => $user->id,
+            'provider' => 'gmail',
+            'account_email' => 'user@gmail.com',
+            'access_token' => 'leaked_access_token_abc',
+            'refresh_token' => 'leaked_refresh_token_xyz',
+            'history_id' => 'internal_history_cursor',
+            'is_active' => true,
+        ]);
+
+        $response = $this->get('/');
+
+        $response->assertOk();
+        $response->assertDontSee('leaked_access_token_abc', escape: false);
+        $response->assertDontSee('leaked_refresh_token_xyz', escape: false);
+        $response->assertInertia(fn (Assert $page) => $page
+            ->has('accounts.0', fn (Assert $account) => $account
+                ->hasAll(['id', 'provider', 'account_email', 'last_synced_at', 'is_active'])
+                ->missingAll(['access_token', 'refresh_token', 'history_id', 'user_id'])
+            )
+        );
+    }
+
     public function test_inactive_email_accounts_are_not_displayed_in_active_list(): void
     {
         $user = User::factory()->create();

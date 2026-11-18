@@ -36,6 +36,26 @@ class EmailAccountTest extends TestCase
         $this->assertEquals('plain_text_refresh_token_67890', $reloaded->refresh_token);
     }
 
+    public function test_oauth_tokens_are_never_serialized(): void
+    {
+        $account = EmailAccount::create([
+            'user_id' => User::factory()->create()->id,
+            'provider' => 'gmail',
+            'account_email' => 'secure@gmail.com',
+            'access_token' => 'plain_text_access_token_12345',
+            'refresh_token' => 'plain_text_refresh_token_67890',
+        ]);
+
+        $this->assertArrayNotHasKey('access_token', $account->toArray());
+        $this->assertArrayNotHasKey('refresh_token', $account->toArray());
+        $this->assertStringNotContainsString('plain_text_access_token_12345', $account->toJson());
+        $this->assertStringNotContainsString('plain_text_refresh_token_67890', $account->toJson());
+
+        // Still readable (decrypted) in server-side code.
+        $this->assertSame('plain_text_access_token_12345', $account->access_token);
+        $this->assertSame('plain_text_refresh_token_67890', $account->refresh_token);
+    }
+
     public function test_deleting_account_cascades_and_removes_senders_and_rules(): void
     {
         $user = User::factory()->create();

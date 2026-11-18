@@ -23,6 +23,15 @@ class EmailAccount extends Model
         'is_active',
     ];
 
+    /**
+     * OAuth credentials are decrypted by the casts below, so they must never
+     * be serialized (Inertia props, JSON responses, logs, queue payloads).
+     */
+    protected $hidden = [
+        'access_token',
+        'refresh_token',
+    ];
+
     protected $casts = [
         'access_token' => 'encrypted',
         'refresh_token' => 'encrypted',

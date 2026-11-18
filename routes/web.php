@@ -7,7 +7,8 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 Route::get('/', function () {
-    $accounts = EmailAccount::where('is_active', true)->get();
+    $accounts = EmailAccount::where('is_active', true)
+        ->get(['id', 'provider', 'account_email', 'last_synced_at', 'is_active']);
     $totalSenders = EmailSender::count();
     $rules = RetentionRule::where('is_active', true)->get();
 
