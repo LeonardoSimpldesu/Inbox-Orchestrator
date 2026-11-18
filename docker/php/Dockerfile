@@ -24,8 +24,10 @@ RUN mkdir -p /etc/apt/keyrings && \
     apt-get update && apt-get install -y nodejs && \
     rm -rf /var/lib/apt/lists/*
 
-# Install PHP extensions
-RUN docker-php-ext-install pdo pdo_mysql pdo_sqlite mbstring zip exif pcntl bcmath intl opcache
+# Install PHP extensions & PCOV for code coverage
+RUN docker-php-ext-install pdo pdo_mysql pdo_sqlite mbstring zip exif pcntl bcmath intl opcache && \
+    pecl install pcov && \
+    docker-php-ext-enable pcov
 
 # Get Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
