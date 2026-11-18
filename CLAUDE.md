@@ -53,6 +53,7 @@ Every query starts from the authenticated user: `User::emailAccounts()`, `sender
 - `EmailAccountController`: `/accounts` page, `POST /accounts/google/redirect` (state in session `google_oauth_state`), callback, `DELETE /accounts/{id}`. Never log the OAuth `code` or tokens.
 - Disconnect = revoke at Google + **soft delete** (`deleted_at`); reconnecting the same Gmail by the same user restores the row. A Gmail can be active for only one user (checked in the callback; soft-deleted rows don't count). Rejected grants are discarded **without revoking**: the Google grant is shared, so revoking would cut off the user who has it connected.
 - Account state is derived on `EmailAccount` (`needsReauth()`, `reconnectBy()`, `expiringSoon()`, `summary()` = the only shape sent to the frontend). `services.google.testing` (`GOOGLE_OAUTH_TESTING`) enables the 7-day reconnect window of Google's "Testing" status.
+- The callback is a cross-site top-level GET from Google, so the session cookie must stay `SameSite=lax` (a `strict` cookie would drop the session and the `state`).
 - `SyncEmailAccountJob` takes the account id (no tokens in queue payloads) and skips disconnected accounts, disabled users and accounts needing reauth.
 
 ### Frontend
