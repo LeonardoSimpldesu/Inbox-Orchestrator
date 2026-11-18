@@ -1,7 +1,7 @@
 import type { FormEvent } from 'react';
 import { useForm } from '@inertiajs/react';
 import GuestLayout from '@/Layouts/GuestLayout';
-import TextField from '@/Components/TextField';
+import PasswordField from '@/Components/PasswordField';
 import PrimaryButton from '@/Components/PrimaryButton';
 
 export default function ConfirmPassword() {
@@ -15,10 +15,9 @@ export default function ConfirmPassword() {
     return (
         <GuestLayout title="Confirme sua senha" description="Esta é uma área protegida. Confirme sua senha para continuar.">
             <form onSubmit={submit} className="space-y-4" noValidate>
-                <TextField
+                <PasswordField
                     id="password"
                     label="Senha"
-                    type="password"
                     autoComplete="current-password"
                     autoFocus
                     required

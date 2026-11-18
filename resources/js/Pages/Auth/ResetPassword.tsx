@@ -1,7 +1,7 @@
 import type { FormEvent } from 'react';
-import { useForm } from '@inertiajs/react';
+import { Link, useForm } from '@inertiajs/react';
 import GuestLayout from '@/Layouts/GuestLayout';
-import TextField from '@/Components/TextField';
+import PasswordField from '@/Components/PasswordField';
 import PrimaryButton from '@/Components/PrimaryButton';
 
 interface ResetPasswordProps {
@@ -10,6 +10,7 @@ interface ResetPasswordProps {
 }
 
 export default function ResetPassword({ token, email }: ResetPasswordProps) {
+    // The token only works for the e-mail it was issued to, so the e-mail comes from the link and isn't editable.
     const form = useForm({ token, email, password: '', password_confirmation: '' });
 
     const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -19,22 +20,25 @@ export default function ResetPassword({ token, email }: ResetPasswordProps) {
 
     return (
         <GuestLayout title="Criar nova senha" description="Use pelo menos 12 caracteres.">
-            <form onSubmit={submit} className="space-y-4" noValidate>
-                <TextField
-                    id="email"
-                    label="E-mail"
-                    type="email"
-                    autoComplete="username"
-                    required
-                    value={form.data.email}
-                    onChange={(e) => form.setData('email', e.target.value)}
-                    error={form.errors.email}
-                />
+            {form.errors.email && (
+                <div role="alert" className="mb-4 rounded-xl border border-rose-500/40 bg-rose-950/60 p-3 text-sm text-rose-300">
+                    {form.errors.email}{' '}
+                    <Link href="/forgot-password" className="underline hover:text-rose-200">
+                        Pedir um novo link
+                    </Link>
+                </div>
+            )}
 
-                <TextField
+            <form onSubmit={submit} className="space-y-4" noValidate>
+                <p className="text-sm text-slate-400">
+                    Conta: <span className="font-medium text-slate-200">{email}</span>
+                </p>
+
+                <input type="hidden" name="email" value={email} autoComplete="username" readOnly />
+
+                <PasswordField
                     id="password"
                     label="Nova senha"
-                    type="password"
                     autoComplete="new-password"
                     autoFocus
                     required
@@ -43,10 +47,9 @@ export default function ResetPassword({ token, email }: ResetPasswordProps) {
                     error={form.errors.password}
                 />
 
-                <TextField
+                <PasswordField
                     id="password_confirmation"
                     label="Confirme a nova senha"
-                    type="password"
                     autoComplete="new-password"
                     required
                     value={form.data.password_confirmation}

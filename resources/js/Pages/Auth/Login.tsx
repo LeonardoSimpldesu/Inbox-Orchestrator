@@ -2,6 +2,7 @@ import type { FormEvent } from 'react';
 import { Link, useForm } from '@inertiajs/react';
 import GuestLayout from '@/Layouts/GuestLayout';
 import TextField from '@/Components/TextField';
+import PasswordField from '@/Components/PasswordField';
 import PrimaryButton from '@/Components/PrimaryButton';
 import StatusMessage from '@/Components/StatusMessage';
 
@@ -35,10 +36,9 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                     error={form.errors.email}
                 />
 
-                <TextField
+                <PasswordField
                     id="password"
                     label="Senha"
-                    type="password"
                     autoComplete="current-password"
                     required
                     value={form.data.password}

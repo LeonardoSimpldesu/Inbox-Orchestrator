@@ -5,6 +5,7 @@ namespace Tests\Feature\Auth;
 use App\Models\User;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -108,6 +109,21 @@ class PasswordResetTest extends TestCase
         $this->post('/reset-password', $payload)->assertSessionHasNoErrors();
         $this->post('/reset-password', [...$payload, 'password' => 'outra-senha-bem-longa', 'password_confirmation' => 'outra-senha-bem-longa'])
             ->assertSessionHasErrors(['email' => 'Este link de redefinição de senha é inválido ou expirou.']);
+    }
+
+    public function test_reset_with_an_email_other_than_the_links_reports_an_invalid_link(): void
+    {
+        $user = User::factory()->create(['email' => 'user@example.com']);
+        $token = Password::createToken($user);
+
+        $this->post('/reset-password', [
+            'token' => $token,
+            'email' => 'someone-else@example.com',
+            'password' => self::NEW_PASSWORD,
+            'password_confirmation' => self::NEW_PASSWORD,
+        ])->assertSessionHasErrors(['email' => 'Este link de redefinição de senha é inválido ou expirou.']);
+
+        $this->assertFalse(Hash::check(self::NEW_PASSWORD, $user->fresh()->password));
     }
 
     public function test_expired_token_is_rejected(): void
