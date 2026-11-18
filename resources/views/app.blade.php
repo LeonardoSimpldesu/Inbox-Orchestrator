@@ -12,7 +12,7 @@
 
         <!-- Scripts -->
         @viteReactRefresh
-        @vite(['resources/css/app.css', 'resources/js/app.jsx'])
+        @vite(['resources/css/app.css', 'resources/js/app.tsx'])
         @inertiaHead
     </head>
     <body class="h-full font-sans antialiased bg-slate-950 text-slate-100">

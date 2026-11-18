@@ -75,7 +75,7 @@ describe('Vite dev server file exposure', () => {
     }
 
     test('still serves the frontend entrypoint', async () => {
-        assert.equal(await fetchStatus('/resources/js/app.jsx'), 200);
+        assert.equal(await fetchStatus('/resources/js/app.tsx'), 200);
     });
 
     test('still serves stylesheets', async () => {

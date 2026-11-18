@@ -5,7 +5,8 @@
         "build": "vite build",
         "dev": "vite",
         "audit:prod": "npm audit --omit=dev",
-        "test:security": "node --test \"tests/js/**/*.test.mjs\""
+        "test:security": "node --test \"tests/js/**/*.test.mjs\"",
+        "typecheck": "tsc --noEmit"
     },
     "dependencies": {
         "@inertiajs/react": "^3.0.0",
@@ -17,11 +18,14 @@
     },
     "devDependencies": {
         "@tailwindcss/vite": "^4.0.0",
+        "@types/react": "^19.3.0",
+        "@types/react-dom": "^19.3.0",
         "@vitejs/plugin-react": "^6.0.0",
         "axios": "^1.7.4",
         "concurrently": "^10.0.7",
         "laravel-vite-plugin": "^3.2.1",
         "tailwindcss": "^4.0.0",
+        "typescript": "^7.0.2",
         "vite": "^8.3.8"
     }
 }

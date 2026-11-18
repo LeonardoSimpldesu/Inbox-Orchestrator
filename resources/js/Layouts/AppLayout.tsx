@@ -1,4 +1,4 @@
-import React from 'react';
+import type { ReactNode } from 'react';
 import { Link, usePage } from '@inertiajs/react';
 import { 
     Inbox, 
@@ -13,7 +13,12 @@ import {
     CheckCircle2
 } from 'lucide-react';
 
-export default function AppLayout({ children, title }) {
+interface AppLayoutProps {
+    children: ReactNode;
+    title?: string;
+}
+
+export default function AppLayout({ children }: AppLayoutProps) {
     const { auth, flash } = usePage().props;
     const user = auth?.user;
 

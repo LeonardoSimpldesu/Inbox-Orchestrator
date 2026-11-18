@@ -1,4 +1,4 @@
-import React from 'react';
+import type { EmailAccountSummary, RetentionRuleSummary } from '@/types';
 import AppLayout from '../Layouts/AppLayout';
 import { 
     Mail, 
@@ -13,7 +13,13 @@ import {
     Zap 
 } from 'lucide-react';
 
-export default function Dashboard({ accounts = [], stats = {}, recentRules = [] }) {
+interface DashboardProps {
+    accounts: EmailAccountSummary[];
+    stats: { totalSenders: number; archivedCount: number };
+    recentRules: RetentionRuleSummary[];
+}
+
+export default function Dashboard({ accounts, stats, recentRules }: DashboardProps) {
     return (
         <AppLayout title="Cockpit de Automação">
             {/* Header */}
