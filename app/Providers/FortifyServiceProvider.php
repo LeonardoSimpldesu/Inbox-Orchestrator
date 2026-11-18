@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
@@ -63,10 +64,18 @@ class FortifyServiceProvider extends ServiceProvider
             'status' => $request->session()->get('status'),
         ]));
 
-        Fortify::resetPasswordView(fn (Request $request) => Inertia::render('Auth/ResetPassword', [
-            'token' => $request->route('token'),
-            'email' => (string) $request->query('email', ''),
-        ]));
+        Fortify::resetPasswordView(function (Request $request) {
+            $token = (string) $request->route('token');
+            $user = User::where('email', Str::lower(trim((string) $request->query('email', ''))))->first();
+            $linkValid = $user !== null && Password::broker(config('fortify.passwords'))->tokenExists($user, $token);
+
+            // An invalid link gets no token or e-mail back, so the page only shows the error.
+            return Inertia::render('Auth/ResetPassword', [
+                'linkValid' => $linkValid,
+                'token' => $linkValid ? $token : '',
+                'email' => $linkValid ? $user->email : '',
+            ]);
+        });
 
         Fortify::twoFactorChallengeView(fn () => Inertia::render('Auth/TwoFactorChallenge'));
 

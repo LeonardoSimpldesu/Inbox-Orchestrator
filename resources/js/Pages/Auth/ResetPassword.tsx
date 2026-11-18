@@ -5,12 +5,23 @@ import PasswordField from '@/Components/PasswordField';
 import PrimaryButton from '@/Components/PrimaryButton';
 
 interface ResetPasswordProps {
+    linkValid: boolean;
     token: string;
     email: string;
 }
 
-export default function ResetPassword({ token, email }: ResetPasswordProps) {
-    // The token only works for the e-mail it was issued to, so the e-mail comes from the link and isn't editable.
+const INVALID_LINK_MESSAGE = 'Este link de redefinição de senha é inválido ou expirou.';
+
+function InvalidLink({ message }: { message: string }) {
+    return (
+        <div role="alert" className="mb-4 rounded-xl border border-rose-500/40 bg-rose-950/60 p-3 text-sm text-rose-300">
+            {message}
+        </div>
+    );
+}
+
+export default function ResetPassword({ linkValid, token, email }: ResetPasswordProps) {
+    // The token only works for the e-mail it was issued to, so the e-mail comes from the link and is never shown.
     const form = useForm({ token, email, password: '', password_confirmation: '' });
 
     const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -18,24 +29,34 @@ export default function ResetPassword({ token, email }: ResetPasswordProps) {
         form.post('/reset-password', { onFinish: () => form.reset('password', 'password_confirmation') });
     };
 
+    if (!linkValid) {
+        return (
+            <GuestLayout title="Link inválido">
+                <InvalidLink message={INVALID_LINK_MESSAGE} />
+                <Link
+                    href="/forgot-password"
+                    className="w-full inline-flex items-center justify-center bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-lg shadow-indigo-600/20 transition"
+                >
+                    Pedir um novo link
+                </Link>
+            </GuestLayout>
+        );
+    }
+
     return (
         <GuestLayout title="Criar nova senha" description="Use pelo menos 12 caracteres.">
             {form.errors.email && (
-                <div role="alert" className="mb-4 rounded-xl border border-rose-500/40 bg-rose-950/60 p-3 text-sm text-rose-300">
-                    {form.errors.email}{' '}
-                    <Link href="/forgot-password" className="underline hover:text-rose-200">
-                        Pedir um novo link
-                    </Link>
-                </div>
+                <>
+                    <InvalidLink message={form.errors.email} />
+                    <p className="mb-4 text-sm">
+                        <Link href="/forgot-password" className="text-indigo-400 hover:text-indigo-300">
+                            Pedir um novo link
+                        </Link>
+                    </p>
+                </>
             )}
 
             <form onSubmit={submit} className="space-y-4" noValidate>
-                <p className="text-sm text-slate-400">
-                    Conta: <span className="font-medium text-slate-200">{email}</span>
-                </p>
-
-                <input type="hidden" name="email" value={email} autoComplete="username" readOnly />
-
                 <PasswordField
                     id="password"
                     label="Nova senha"

@@ -68,15 +68,68 @@ class PasswordResetTest extends TestCase
         Notification::assertSentToTimes($user, ResetPassword::class, 1);
     }
 
-    public function test_reset_password_page_renders_with_token_and_email(): void
+    public function test_reset_password_page_accepts_a_valid_link(): void
     {
-        $this->get('/reset-password/abc123?email=user%40example.com')
+        $user = User::factory()->create(['email' => 'user@example.com']);
+        $token = Password::createToken($user);
+
+        $this->get("/reset-password/{$token}?email=user%40example.com")
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Auth/ResetPassword')
-                ->where('token', 'abc123')
+                ->where('linkValid', true)
+                ->where('token', $token)
                 ->where('email', 'user@example.com')
             );
+    }
+
+    public function test_reset_password_page_flags_an_unknown_token_immediately(): void
+    {
+        User::factory()->create(['email' => 'user@example.com']);
+
+        $this->get('/reset-password/not-a-real-token?email=user%40example.com')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Auth/ResetPassword')
+                ->where('linkValid', false)
+                ->where('token', '')
+                ->where('email', '')
+            );
+    }
+
+    public function test_reset_password_page_flags_an_expired_link_immediately(): void
+    {
+        $user = User::factory()->create(['email' => 'user@example.com']);
+        $token = Password::createToken($user);
+
+        $this->travel(61)->minutes();
+
+        $this->get("/reset-password/{$token}?email=user%40example.com")
+            ->assertInertia(fn (Assert $page) => $page->where('linkValid', false));
+    }
+
+    public function test_reset_password_page_flags_a_link_for_an_unknown_email_immediately(): void
+    {
+        $user = User::factory()->create(['email' => 'user@example.com']);
+        $token = Password::createToken($user);
+
+        $this->get("/reset-password/{$token}?email=nobody%40example.com")
+            ->assertInertia(fn (Assert $page) => $page->where('linkValid', false)->where('email', ''));
+    }
+
+    public function test_reset_password_page_flags_a_used_link_immediately(): void
+    {
+        $user = User::factory()->create(['email' => 'user@example.com']);
+        $token = Password::createToken($user);
+        $this->post('/reset-password', [
+            'token' => $token,
+            'email' => 'user@example.com',
+            'password' => self::NEW_PASSWORD,
+            'password_confirmation' => self::NEW_PASSWORD,
+        ]);
+
+        $this->get("/reset-password/{$token}?email=user%40example.com")
+            ->assertInertia(fn (Assert $page) => $page->where('linkValid', false));
     }
 
     public function test_password_can_be_reset_with_valid_token(): void
