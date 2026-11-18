@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -52,6 +53,16 @@ class EmailAccount extends Model
         'oldest_synced_at' => 'datetime',
         'history_completed_at' => 'datetime',
     ];
+
+    /**
+     * Connected, owned by an active user and not flagged for reconnection. The
+     * testing-mode 7-day window is checked in PHP with needsReauth().
+     */
+    public function scopeSyncable(Builder $query): void
+    {
+        $query->whereNull('reauth_required_at')
+            ->whereHas('user', fn (Builder $user) => $user->whereNull('disabled_at'));
+    }
 
     public function user(): BelongsTo
     {

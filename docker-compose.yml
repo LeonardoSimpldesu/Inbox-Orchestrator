@@ -33,7 +33,7 @@ services:
     container_name: inbox_queue
     restart: unless-stopped
     working_dir: /var/www/html
-    command: php artisan queue:work database --sleep=3 --tries=3 --timeout=120
+    command: php artisan queue:work database --queue=default,sync --sleep=3 --tries=3 --timeout=1500
     volumes:
       - .:/var/www/html
     depends_on:
