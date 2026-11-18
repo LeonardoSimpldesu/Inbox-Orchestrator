@@ -64,15 +64,22 @@ export default function AppLayout({ children }: AppLayoutProps) {
                     </nav>
 
                     <div className="flex items-center gap-3">
-                        {user ? (
+                        {user && (
                             <div className="flex items-center gap-2 bg-slate-800/50 border border-slate-700/60 rounded-full px-3 py-1 text-xs">
                                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                                 <span className="text-slate-300 font-medium">{user.name}</span>
-                                <span className="text-slate-500">({user.email})</span>
+                                <span className="text-slate-500 hidden md:inline">({user.email})</span>
                             </div>
-                        ) : (
-                            <span className="text-xs text-slate-500">Modo Demo</span>
                         )}
+                        <Link
+                            href="/logout"
+                            method="post"
+                            as="button"
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:bg-slate-800/80 hover:text-white transition cursor-pointer"
+                        >
+                            <LogOut className="w-4 h-4" />
+                            <span>Sair</span>
+                        </Link>
                     </div>
                 </div>
             </header>

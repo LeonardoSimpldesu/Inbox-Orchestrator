@@ -12,6 +12,7 @@
         "php": "^8.5",
         "google/apiclient": "^2.20",
         "inertiajs/inertia-laravel": "^3.7",
+        "laravel/fortify": "^1.43",
         "laravel/framework": "^13.43",
         "laravel/tinker": "^3.2"
     },
