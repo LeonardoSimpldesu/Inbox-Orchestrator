@@ -189,6 +189,16 @@ class MessageStoreTest extends TestCase
         $this->assertSame('2025-01-01 10:00:00', $this->account->fresh()->oldest_synced_at->format('Y-m-d H:i:s'));
     }
 
+    public function test_storing_changes_does_not_move_oldest_back(): void
+    {
+        $this->store->store($this->account, [$this->message('m1', date: '2026-11-01 10:00:00')]);
+
+        $this->store->store($this->account, [$this->message('ancient', date: '2020-01-01 10:00:00')], extendsCoverage: false);
+
+        $this->assertSame('2026-11-01 10:00:00', $this->account->fresh()->oldest_synced_at->format('Y-m-d H:i:s'));
+        $this->assertSame(2, EmailMessageMeta::count());
+    }
+
     public function test_empty_batch_does_nothing(): void
     {
         DB::enableQueryLog();

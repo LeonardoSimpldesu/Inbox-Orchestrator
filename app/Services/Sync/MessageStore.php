@@ -17,15 +17,19 @@ use Illuminate\Support\Facades\DB;
 class MessageStore
 {
     /**
+     * Only imports that walk the mailbox by date extend coverage: a change to an
+     * old message must not move oldest_synced_at back, or the history import
+     * would skip everything between that message and the real oldest import.
+     *
      * @param  list<MessageMetadata>  $batch
      */
-    public function store(EmailAccount $account, array $batch): void
+    public function store(EmailAccount $account, array $batch, bool $extendsCoverage = true): void
     {
         if ($batch === []) {
             return;
         }
 
-        DB::transaction(function () use ($account, $batch) {
+        DB::transaction(function () use ($account, $batch, $extendsCoverage) {
             $senders = $this->parseSenders($batch);
             $senderIds = $this->upsertSenders($account, $batch, $senders);
 
@@ -57,7 +61,9 @@ class MessageStore
             );
 
             $this->recount(array_values(array_unique($senderIds)));
-            $this->moveOldestBack($account, $batch);
+            if ($extendsCoverage) {
+                $this->moveOldestBack($account, $batch);
+            }
         });
     }
 
