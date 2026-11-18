@@ -13,9 +13,7 @@ class DashboardController extends Controller
         $user = $request->user();
 
         return Inertia::render('Dashboard', [
-            'accounts' => $user->emailAccounts()
-                ->where('is_active', true)
-                ->get(['id', 'provider', 'account_email', 'last_synced_at', 'is_active']),
+            'accounts' => $user->emailAccounts()->get()->map->summary(),
             'stats' => [
                 'totalSenders' => $user->senders()->count(),
                 'archivedCount' => 0,

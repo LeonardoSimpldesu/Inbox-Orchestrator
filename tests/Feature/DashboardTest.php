@@ -11,7 +11,7 @@ use Tests\TestCase;
 
 class DashboardTest extends TestCase
 {
-    private function accountFor(User $user, string $email, bool $active = true): EmailAccount
+    private function accountFor(User $user, string $email): EmailAccount
     {
         return EmailAccount::create([
             'user_id' => $user->id,
@@ -20,7 +20,7 @@ class DashboardTest extends TestCase
             'access_token' => 'access_'.$email,
             'refresh_token' => 'refresh_'.$email,
             'history_id' => 'cursor_'.$email,
-            'is_active' => $active,
+            'authorized_at' => now(),
         ]);
     }
 
@@ -99,22 +99,30 @@ class DashboardTest extends TestCase
         $response->assertDontSee('refresh_user@gmail.com', escape: false);
         $response->assertInertia(fn (Assert $page) => $page
             ->has('accounts.0', fn (Assert $account) => $account
-                ->hasAll(['id', 'provider', 'account_email', 'last_synced_at', 'is_active'])
-                ->missingAll(['access_token', 'refresh_token', 'history_id', 'user_id'])
+                ->hasAll(['id', 'provider', 'account_email', 'last_synced_at', 'status', 'reconnect_by', 'expiring_soon'])
+                ->missingAll(['access_token', 'refresh_token', 'history_id', 'user_id', 'authorized_at', 'reauth_required_at', 'deleted_at'])
             )
         );
     }
 
-    public function test_inactive_email_accounts_are_not_displayed_in_active_list(): void
+    public function test_disconnected_accounts_and_their_data_are_hidden(): void
     {
         $user = User::factory()->create();
-        $this->accountFor($user, 'disabled@gmail.com', active: false);
+        $kept = $this->accountFor($user, 'kept@gmail.com');
+        $gone = $this->accountFor($user, 'gone@gmail.com');
+        $this->senderFor($gone, 'news@gone.com');
+        $this->ruleFor($gone, 'Regra da conta desconectada');
+        $gone->delete();
 
         $this->actingAs($user)
             ->get('/')
             ->assertInertia(fn (Assert $page) => $page
-                ->component('Dashboard')
-                ->has('accounts', 0)
+                ->has('accounts', 1)
+                ->where('accounts.0.account_email', 'kept@gmail.com')
+                ->where('stats.totalSenders', 0)
+                ->has('recentRules', 0)
+                ->has('auth.user.accounts', 1)
+                ->where('auth.user.accounts.0.account_email', $kept->account_email)
             );
     }
 

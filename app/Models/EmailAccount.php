@@ -6,10 +6,17 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Carbon;
 
 class EmailAccount extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
+
+    /** Google expires refresh tokens of apps in "Testing" publishing status after 7 days. */
+    private const TESTING_TOKEN_LIFETIME_DAYS = 7;
+
+    private const EXPIRING_SOON_DAYS = 2;
 
     protected $fillable = [
         'user_id',
@@ -18,9 +25,10 @@ class EmailAccount extends Model
         'access_token',
         'refresh_token',
         'token_expires_at',
+        'authorized_at',
+        'reauth_required_at',
         'history_id',
         'last_synced_at',
-        'is_active',
     ];
 
     /**
@@ -36,8 +44,9 @@ class EmailAccount extends Model
         'access_token' => 'encrypted',
         'refresh_token' => 'encrypted',
         'token_expires_at' => 'datetime',
+        'authorized_at' => 'datetime',
+        'reauth_required_at' => 'datetime',
         'last_synced_at' => 'datetime',
-        'is_active' => 'boolean',
     ];
 
     public function user(): BelongsTo
@@ -58,5 +67,44 @@ class EmailAccount extends Model
     public function retentionRules(): HasMany
     {
         return $this->hasMany(RetentionRule::class);
+    }
+
+    public function reconnectBy(): ?Carbon
+    {
+        if (! config('services.google.testing') || $this->authorized_at === null) {
+            return null;
+        }
+
+        return $this->authorized_at->copy()->addDays(self::TESTING_TOKEN_LIFETIME_DAYS);
+    }
+
+    public function needsReauth(): bool
+    {
+        return $this->reauth_required_at !== null || ($this->reconnectBy()?->isPast() ?? false);
+    }
+
+    public function expiringSoon(): bool
+    {
+        $deadline = $this->reconnectBy();
+
+        return $deadline !== null
+            && ! $this->needsReauth()
+            && now()->diffInDays($deadline) <= self::EXPIRING_SOON_DAYS;
+    }
+
+    /**
+     * @return array{id: int, provider: string, account_email: string, last_synced_at: ?string, status: 'connected'|'needs_reauth', reconnect_by: ?string, expiring_soon: bool}
+     */
+    public function summary(): array
+    {
+        return [
+            'id' => $this->id,
+            'provider' => $this->provider,
+            'account_email' => $this->account_email,
+            'last_synced_at' => $this->last_synced_at?->toIso8601String(),
+            'status' => $this->needsReauth() ? 'needs_reauth' : 'connected',
+            'reconnect_by' => $this->reconnectBy()?->toDateString(),
+            'expiring_soon' => $this->expiringSoon(),
+        ];
     }
 }

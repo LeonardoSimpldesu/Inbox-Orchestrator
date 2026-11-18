@@ -28,6 +28,14 @@ return [
         'key' => env('RESEND_KEY'),
     ],
 
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'redirect' => env('GOOGLE_REDIRECT_URI', rtrim((string) env('APP_URL', 'http://localhost'), '/').'/accounts/google/callback'),
+        // Apps in Google's "Testing" status get refresh tokens that expire after 7 days.
+        'testing' => (bool) env('GOOGLE_OAUTH_TESTING', true),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),

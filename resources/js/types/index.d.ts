@@ -3,7 +3,9 @@ export interface EmailAccountSummary {
     provider: 'gmail' | 'outlook';
     account_email: string;
     last_synced_at: string | null;
-    is_active: boolean;
+    status: 'connected' | 'needs_reauth';
+    reconnect_by: string | null;
+    expiring_soon: boolean;
 }
 
 export interface User {

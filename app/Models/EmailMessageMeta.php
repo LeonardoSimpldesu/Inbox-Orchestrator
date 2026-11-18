@@ -46,6 +46,7 @@ class EmailMessageMeta extends Model
     public function getGmailThreadUrlAttribute(): string
     {
         $accountEmail = urlencode($this->account->account_email ?? '');
+
         return "https://mail.google.com/mail/u/?authuser={$accountEmail}#all/{$this->provider_thread_id}";
     }
 }

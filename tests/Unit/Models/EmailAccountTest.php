@@ -7,6 +7,7 @@ use App\Models\EmailMessageMeta;
 use App\Models\EmailSender;
 use App\Models\RetentionRule;
 use App\Models\User;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
@@ -96,8 +97,7 @@ class EmailAccountTest extends TestCase
         $this->assertDatabaseHas('email_senders', ['id' => $sender->id]);
         $this->assertDatabaseHas('email_messages_meta', ['provider_message_id' => 'msg_101']);
 
-        // Delete account
-        $account->delete();
+        $account->forceDelete();
 
         // All related children must be deleted automatically by cascade
         $this->assertDatabaseMissing('email_accounts', ['id' => $account->id]);
@@ -138,5 +138,83 @@ class EmailAccountTest extends TestCase
         $this->assertCount(1, $account->senders);
         $this->assertCount(0, $account->messagesMeta);
         $this->assertCount(1, $account->retentionRules);
+    }
+
+    public function test_connected_account_status(): void
+    {
+        config(['services.google.testing' => true]);
+        $this->travelTo(Date::parse('2026-11-18 12:00:00'));
+        $account = EmailAccount::factory()->create(['authorized_at' => now()]);
+
+        $this->assertFalse($account->needsReauth());
+        $this->assertSame('2026-11-25', $account->reconnectBy()?->toDateString());
+        $this->assertFalse($account->expiringSoon());
+        $this->assertSame('connected', $account->summary()['status']);
+    }
+
+    public function test_reauth_required_at_means_needs_reauth(): void
+    {
+        config(['services.google.testing' => false]);
+        $account = EmailAccount::factory()->needsReauth()->create();
+
+        $this->assertTrue($account->needsReauth());
+        $this->assertSame('needs_reauth', $account->summary()['status']);
+        $this->assertFalse($account->expiringSoon());
+    }
+
+    public function test_testing_mode_window_expired_means_needs_reauth(): void
+    {
+        config(['services.google.testing' => true]);
+        $account = EmailAccount::factory()->create(['authorized_at' => now()->subDays(8)]);
+
+        $this->assertTrue($account->needsReauth());
+        $this->assertFalse($account->expiringSoon());
+    }
+
+    public function test_no_deadline_when_testing_mode_is_off(): void
+    {
+        config(['services.google.testing' => false]);
+        $account = EmailAccount::factory()->create(['authorized_at' => now()->subDays(30)]);
+
+        $this->assertNull($account->reconnectBy());
+        $this->assertFalse($account->needsReauth());
+        $this->assertFalse($account->expiringSoon());
+        $this->assertNull($account->summary()['reconnect_by']);
+    }
+
+    public function test_expiring_soon_within_two_days(): void
+    {
+        config(['services.google.testing' => true]);
+
+        $soon = EmailAccount::factory()->create(['authorized_at' => now()->subDays(5)->subHour()]);
+        $later = EmailAccount::factory()->create(['authorized_at' => now()->subDays(4)]);
+
+        $this->assertTrue($soon->expiringSoon());
+        $this->assertFalse($later->expiringSoon());
+    }
+
+    public function test_account_without_authorized_at_has_no_deadline(): void
+    {
+        config(['services.google.testing' => true]);
+        $account = EmailAccount::factory()->create(['authorized_at' => null]);
+
+        $this->assertNull($account->reconnectBy());
+        $this->assertFalse($account->needsReauth());
+    }
+
+    public function test_summary_has_only_public_fields(): void
+    {
+        config(['services.google.testing' => true]);
+        $account = EmailAccount::factory()->create(['account_email' => 'me@gmail.com', 'history_id' => 'h1']);
+
+        $summary = $account->summary();
+
+        $this->assertSame(
+            ['id', 'provider', 'account_email', 'last_synced_at', 'status', 'reconnect_by', 'expiring_soon'],
+            array_keys($summary),
+        );
+        $this->assertSame('me@gmail.com', $summary['account_email']);
+        $this->assertStringNotContainsString($account->access_token, json_encode($summary));
+        $this->assertStringNotContainsString($account->refresh_token, json_encode($summary));
     }
 }
