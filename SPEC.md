@@ -29,7 +29,7 @@ O **Inbox Orchestrator** é um cockpit de automação e higienização contínua
                                │ (Inertia HTTP / JSON Props)
 ┌──────────────────────────────▼──────────────────────────────┐
 │                  Backend: Laravel 13 App                    │
-│  - Autenticação e Gestão de Usuários (Breeze / Fortify)    │
+│  - Autenticação e Gestão de Usuários (Fortify)             │
 │  - Controllers & Inertia Page Handlers                      │
 │  - Camada de Serviços e Regras de Negócio                   │
 └──────────────┬───────────────────────────────┬──────────────┘
@@ -206,8 +206,9 @@ app/
 ## 6. Fases e Cronograma de Entrega
 
 * **Fase 1 (MVP Atual):**
-  - Setup Laravel 13 + Inertia + React + Tailwind + Database Queue.
-  - Autenticação e gestão de múltiplos usuários.
+  - ✅ Setup Laravel 13 + Inertia + React (TypeScript) + Tailwind + Database Queue.
+  - ✅ Autenticação e gestão de múltiplos usuários: login com Fortify, 2FA opcional, reset de senha, sem cadastro público; usuários gerenciados por `php artisan user:create|disable|enable|delete|reset-two-factor`. Dados isolados por usuário. Detalhes em `docs/superpowers/specs/2026-11-18-authentication-design.md`.
+  - Requisito para as próximas etapas: jobs de sincronização e regras TTL devem ignorar contas de usuários desativados (`users.disabled_at`), e as consultas devem partir do usuário (`$user->emailAccounts()`, `senders()`, `retentionRules()`).
   - Conexão OAuth 2.0 com Gmail e armazenamento criptografado de tokens.
   - Worker de sincronização de metadados e remetentes.
   - Tela do Hub de Assinaturas com Unsubscribe e links diretos para o Gmail.
