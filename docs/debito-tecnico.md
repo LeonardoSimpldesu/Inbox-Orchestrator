@@ -14,6 +14,8 @@ Itens conhecidos que ficaram para depois. Cada um traz o impacto, onde está e u
 | 8 | Contas Gmail desconectadas guardadas para sempre | Privacidade / limpeza | Média |
 | 9 | `user:delete` não revoga o acesso ao Gmail no Google | Segurança (higiene) | Baixa |
 | 10 | Sessão expirada durante o consentimento do Google gera erro de validação | UX | Baixa |
+| 11 | Novidades do Gmail por polling (5 min) em vez de notificações push | Desempenho / tempo real | Média (quando houver servidor público) |
+| 12 | Conta parada mais de uma semana perde mudanças em e-mails antigos | Consistência de dados | Baixa |
 
 ---
 
@@ -121,4 +123,28 @@ Mesmo sem a expiração semanal, o refresh token ainda pode ser invalidado (senh
 **Onde:** `EmailAccountController::callback`.
 
 **Sugestão:** quando não houver `state` na sessão (em vez de um `state` diferente), mostrar "Sua sessão expirou durante a conexão. Clique em Conectar conta Gmail de novo.".
+
+## 11. Novidades do Gmail por polling em vez de notificações push
+
+**Origem:** sincronização Gmail (2026-11-18).
+
+**O que acontece:** as novidades são buscadas a cada 5 minutos (`inbox:sync`). O Gmail oferece notificações push, mas elas exigem uma URL pública com HTTPS, e o ambiente atual roda só em `127.0.0.1`.
+
+**Onde:** `routes/console.php`, `EmailSyncService` (modo `Changes`).
+
+**Sugestão:** quando o app estiver num servidor com domínio e HTTPS:
+1. Criar um tópico no Google Cloud Pub/Sub e dar permissão de publicação a `gmail-api-push@system.gserviceaccount.com`.
+2. Criar uma assinatura push apontando para uma rota nova (ex.: `POST /webhooks/gmail`), com autenticação OIDC.
+3. Chamar `users.watch` para cada conta ao conectar, e renovar a cada 7 dias com um comando agendado.
+4. Na rota, validar o token OIDC do Pub/Sub, achar a conta pelo `emailAddress` do aviso e despachar `SyncEmailAccountJob` com `SyncMode::Changes`. O polling pode continuar como rede de segurança, com intervalo maior.
+
+## 12. Conta parada mais de uma semana perde mudanças em e-mails antigos
+
+**Origem:** sincronização Gmail (2026-11-18).
+
+**O que acontece:** o histórico de mudanças do Gmail só alcança cerca de uma semana. Se a conta fica mais tempo sem sincronizar (por exemplo, esperando reconexão), o app relê só os últimos 3 meses. Mudanças feitas nesse intervalo em e-mails mais antigos (lido/não lido, arquivado, apagado) não são vistas.
+
+**Onde:** `EmailSyncService::applyChanges` (tratamento de `HistoryExpired`).
+
+**Sugestão:** ao detectar `HistoryExpired`, marcar a conta para uma releitura completa em fatias (zerar `history_completed_at` e reiniciar `oldest_synced_at` a partir de agora), reaproveitando o modo `History`. As gravações já são idempotentes.
 

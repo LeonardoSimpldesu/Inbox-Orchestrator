@@ -77,6 +77,22 @@ GOOGLE_OAUTH_TESTING=true
 - Um Gmail só pode estar conectado por um usuário de cada vez.
 - O app pede todas as permissões. Se alguma for desmarcada na tela do Google, a conexão é recusada.
 
+## Sincronização
+
+Só metadados são importados (remetente, assunto, data, labels e cabeçalhos de desinscrição), nunca corpo ou anexos.
+
+| Etapa | Quando | Limite |
+|---|---|---|
+| E-mails recentes | Ao conectar a conta | Últimos 3 meses, até 5.000 e-mails ou 20 min |
+| Histórico antigo | A cada 10 min (`inbox:import-history`) | 500 e-mails por conta por vez |
+| Importar histórico agora | Botão em **Contas** | 20 min |
+| Novidades | A cada 5 min (`inbox:sync`) e botão **Sincronizar** do painel | — |
+
+- Os jobs rodam na fila `sync`. O container `queue` atende `--queue=default,sync --timeout=1500`, e `DB_QUEUE_RETRY_AFTER` (1600) precisa ser maior que o job mais longo.
+- **Depois de mudar código PHP, reinicie os workers:** `docker exec inbox_app php artisan queue:restart`. O worker é um processo longo e mantém o código antigo na memória.
+- **Cota do Gmail:** cada conta gasta no máximo `GMAIL_QUOTA_UNITS_PER_MINUTE` unidades por minuto (padrão 1.200, cerca de 240 e-mails por minuto). O limite real do projeto fica no Cloud Console, em *Gmail API > Quotas > "Units per minute per user"*. Se ele for maior, aumente o valor no `.env` (sem passar do limite).
+- Rodar manualmente: `docker exec inbox_app php artisan inbox:sync` ou `inbox:import-history`.
+
 ## E-mail
 
 | Ambiente | Configuração |

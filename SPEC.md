@@ -77,6 +77,8 @@ Contas de e-mail conectadas por cada usuário (suporte a múltiplas contas).
 - `reauth_required_at` (Timestamp, Nullable - o Google recusou a renovação; a conta precisa ser reconectada)
 - `history_id` / `sync_token` (String, Nullable - para sync incremental)
 - `last_synced_at` (Timestamp, Nullable)
+- `oldest_synced_at` (Timestamp, Nullable - mensagem mais antiga já importada; a importação do histórico continua a partir dela)
+- `history_completed_at` (Timestamp, Nullable - o histórico chegou ao fim)
 - `deleted_at` (Timestamp, Nullable - soft delete: conta desconectada, dados guardados para reconexão)
 - `created_at`, `updated_at`
 - Um mesmo Gmail só pode estar conectado (não desconectado) por um usuário por vez.
@@ -88,10 +90,11 @@ Indexação agregada de remetentes para triagem e desinscrição.
 - `email` (String - ex: `newsletter@exemplo.com`)
 - `name` (String, Nullable)
 - `domain` (String - ex: `exemplo.com`)
-- `total_messages_received` (Integer, Default 0)
+- `total_messages_received` (Integer, Default 0 - recalculado a partir das mensagens não deletadas, nunca somado)
 - `total_messages_unread` (Integer, Default 0)
 - `unsubscribe_mailto` (String, Nullable)
-- `unsubscribe_url` (String, Nullable)
+- `unsubscribe_url` (String, Nullable - só `https`)
+- `unsubscribe_one_click` (Boolean, Default false - aceita desinscrição de um clique, RFC 8058)
 - `unsubscribe_status` (Enum: `none`, `requested`, `unsubscribed`, `failed`)
 - `last_email_received_at` (Timestamp, Nullable)
 - `created_at`, `updated_at`
@@ -110,9 +113,10 @@ Metadados mínimos de e-mails para processamento rápido de regras.
 - `labels` (JSON - ex: `["INBOX", "CATEGORY_PROMOTIONS", "UNREAD"]`)
 - `received_at` (Timestamp)
 - `is_archived` (Boolean, Default false)
-- `is_deleted` (Boolean, Default false)
+- `is_deleted` (Boolean, Default false - está na lixeira ou no spam)
 - `created_at`, `updated_at`
-- *Index:* `[email_account_id, received_at]`, `[email_account_id, sender_domain]`
+- *Unique:* `[email_account_id, provider_message_id]` (releituras atualizam, nunca duplicam)
+- *Index:* `[email_account_id, received_at]`, `[email_account_id, sender_domain]`, `[email_sender_id]`
 
 ### 3.5. `retention_rules`
 Políticas de expiração configuradas pelo usuário.
@@ -151,6 +155,14 @@ Histórico de auditoria das execuções de regras.
 5. Dispara imediatamente o job inicial de sincronização de metadados em segundo plano.
 6. **Reconectar** renova o acesso da mesma conta. **Desconectar** revoga o acesso no Google e faz soft delete; reconectar depois restaura remetentes e regras.
 7. Com o app do Google em modo Teste, o acesso expira em 7 dias: a tela mostra "Reconecte até dd/mm" e o painel avisa quando falta pouco ou já expirou (ver `docs/debito-tecnico.md`, item 7). Design: `docs/superpowers/specs/2026-11-18-gmail-oauth-design.md`.
+
+### 4.1.1. Sincronização de metadados
+Só metadados (remetente, assunto, data, labels, cabeçalhos de desinscrição); nunca corpo ou anexos. Spam e lixeira não são importados.
+1. **Recentes:** ao conectar, os últimos 3 meses, até 5.000 mensagens (ou 20 min).
+2. **Histórico:** a cada 10 min (`inbox:import-history`), até 500 mensagens por conta, indo para trás no tempo até o fim. Botão **"Importar histórico agora"** roda por até 20 min.
+3. **Novidades:** a cada 5 min (`inbox:sync`) e pelo botão **"Sincronizar"** do painel, via histórico de mudanças do Gmail. Se a conta ficou parada mais de ~1 semana, relê os 3 meses recentes.
+4. Cada conta respeita a cota do Gmail por minuto (`GMAIL_QUOTA_UNITS_PER_MINUTE`); lotes de 25 mensagens, com nova tentativa quando o Google limita.
+5. A tela Contas mostra "Importando e-mails recentes…", "Histórico importado até dd/mm/aaaa" ou "Histórico completo". Design: `docs/superpowers/specs/2026-11-18-gmail-sync-design.md`.
 
 ### 4.2. Hub de Assinaturas (Unsubscribe Manager)
 1. **Listagem Agregada:** Apresenta lista de remetentes com nome, domínio, total de e-mails, quantos estão não lidos e data do último recebido.
@@ -214,7 +226,7 @@ app/
   - ✅ Autenticação e gestão de múltiplos usuários: login com Fortify, 2FA opcional, reset de senha, sem cadastro público; usuários gerenciados por `php artisan user:create|disable|enable|delete|reset-two-factor`. Dados isolados por usuário. Detalhes em `docs/superpowers/specs/2026-11-18-authentication-design.md`.
   - Requisito para as próximas etapas: jobs de sincronização e regras TTL devem ignorar contas de usuários desativados (`users.disabled_at`), e as consultas devem partir do usuário (`$user->emailAccounts()`, `senders()`, `retentionRules()`).
   - ✅ Conexão OAuth 2.0 com Gmail e armazenamento criptografado de tokens: tela Contas, reconectar, desconectar (soft delete), um Gmail por usuário, aviso de expiração do modo Teste.
-  - Worker de sincronização de metadados e remetentes.
+  - ✅ Worker de sincronização de metadados e remetentes: recentes (3 meses), histórico em fatias, novidades a cada 5 min, sem duplicação e respeitando a cota do Gmail.
   - Tela do Hub de Assinaturas com Unsubscribe e links diretos para o Gmail.
   - Tela de Regras de Expiração (TTL) com Dry-Run, execução diária e botão manual.
 

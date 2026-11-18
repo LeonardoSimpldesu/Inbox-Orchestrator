@@ -56,6 +56,12 @@ Every query starts from the authenticated user: `User::emailAccounts()`, `sender
 - The callback is a cross-site top-level GET from Google, so the session cookie must stay `SameSite=lax` (a `strict` cookie would drop the session and the `state`).
 - `SyncEmailAccountJob` takes the account id (no tokens in queue payloads) and skips disconnected accounts, disabled users and accounts needing reauth.
 
+### Gmail metadata sync
+- `EmailSyncService::run($account, SyncMode)` runs one budgeted mode per job: `Recent` (90 days, 5,000 msgs), `Changes` (history.list since `history_id`; falls back to `Recent` on `HistoryExpired`), `History` (500 msgs, `before:` `oldest_synced_at`), `HistoryNow` (20 min). `SyncEmailAccountJob` (queue `sync`) holds a per-account `WithoutOverlapping` lock; scheduled modes are dropped when busy, manual ones retried.
+- `MessageStore` writes each batch with a **constant number of queries** (bulk upserts keyed by `(email_account_id, provider_message_id)` / `(email_account_id, email)`, one correlated `UPDATE` to recount senders). Sender totals are always recomputed, never incremented, so re-reads are idempotent. Only date-walking imports move `oldest_synced_at` (`extendsCoverage: false` for `Changes`). Tests assert query counts; keep them constant.
+- `GmailProviderService` throttles each account to `services.google.quota_units_per_minute` (RateLimiter, cost per Gmail method), batches 25 metadata reads and retries rate-limited items (429 / 403 `rateLimitExceeded`) with backoff. Errors surface as `ProviderUnavailable` (logged with account id + error type only), `HistoryExpired` or `ReauthorizationRequired`.
+- Queue workers keep code in memory: run `php artisan queue:restart` after PHP changes.
+
 ### Frontend
 Inertia pages in `resources/js/Pages`, layouts `AppLayout` (authenticated) and `GuestLayout` (auth screens), shared inputs in `Components/`. Shared props are typed via module augmentation of `@inertiajs/core` (`InertiaConfig.sharedPageProps`) in `resources/js/types/inertia.d.ts`; domain types in `resources/js/types/index.d.ts`.
 

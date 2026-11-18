@@ -79,7 +79,7 @@ export default function AccountsIndex({ accounts, testingMode }: AccountsIndexPr
                                     </div>
                                     <div className="min-w-0">
                                         <div className="text-sm font-medium text-slate-200 truncate">{account.account_email}</div>
-                                        <div className="mt-1 flex flex-col gap-1">
+                                        <div className="mt-1 flex flex-col items-start gap-1">
                                             <AccountStatusBadge account={account} />
                                             <AccountSyncProgress sync={account.sync} />
                                         </div>
