@@ -4,8 +4,10 @@ namespace App\Providers;
 
 use App\Actions\Fortify\ResetUserPassword;
 use App\Http\Responses\PasswordResetLinkRequestedResponse;
+use App\Models\User;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
@@ -34,6 +36,17 @@ class FortifyServiceProvider extends ServiceProvider
     {
         Fortify::resetUserPasswordsUsing(ResetUserPassword::class);
         Fortify::redirectUserForTwoFactorAuthenticationUsing(RedirectIfTwoFactorAuthenticatable::class);
+
+        // Disabled users fail exactly like a wrong password (also before the 2FA challenge).
+        Fortify::authenticateUsing(function (Request $request): ?User {
+            $user = User::where('email', $request->input(Fortify::username()))->first();
+
+            if ($user === null || $user->isDisabled() || ! Hash::check((string) $request->input('password'), $user->password)) {
+                return null;
+            }
+
+            return $user;
+        });
 
         $this->registerViews();
         $this->registerRateLimiters();

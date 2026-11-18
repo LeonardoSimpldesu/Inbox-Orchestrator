@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
@@ -49,7 +50,28 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
+            'disabled_at' => 'datetime',
         ];
+    }
+
+    public function isDisabled(): bool
+    {
+        return $this->disabled_at !== null;
+    }
+
+    /**
+     * Disabled users get no reset link. The endpoint still answers with the
+     * same generic message, so nothing reveals the account state.
+     *
+     * @param  string  $token
+     */
+    public function sendPasswordResetNotification($token): void
+    {
+        if ($this->isDisabled()) {
+            return;
+        }
+
+        $this->notify(new ResetPassword($token));
     }
 
     /**
