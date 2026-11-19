@@ -16,6 +16,8 @@ use Illuminate\Support\Facades\DB;
  */
 class MessageStore
 {
+    private const LABEL_CHANGE_CHUNK = 500;
+
     /**
      * Only imports that walk the mailbox by date extend coverage: a change to an
      * old message must not move oldest_synced_at back, or the history import
@@ -84,6 +86,54 @@ class MessageStore
 
             $this->recount($senderIds);
         });
+    }
+
+    /**
+     * Mirrors a label change already applied at the provider onto the stored
+     * rows, in chunks with a constant number of queries per chunk.
+     *
+     * @param  list<string>  $providerIds
+     * @param  list<string>  $add
+     * @param  list<string>  $remove
+     */
+    public function applyLabelChange(EmailAccount $account, array $providerIds, array $add, array $remove): void
+    {
+        foreach (array_chunk($providerIds, self::LABEL_CHANGE_CHUNK) as $chunk) {
+            DB::transaction(function () use ($account, $chunk, $add, $remove) {
+                $rows = EmailMessageMeta::where('email_account_id', $account->id)
+                    ->whereIn('provider_message_id', $chunk)
+                    ->get(['email_account_id', 'provider_message_id', 'provider_thread_id', 'email_sender_id', 'sender_email', 'sender_domain', 'received_at', 'labels']);
+
+                if ($rows->isEmpty()) {
+                    return;
+                }
+
+                $now = now();
+                EmailMessageMeta::upsert(
+                    $rows->map(function (EmailMessageMeta $row) use ($add, $remove, $now) {
+                        $labels = array_values(array_unique([...array_diff($row->labels ?? [], $remove), ...$add]));
+
+                        return [
+                            'email_account_id' => $row->email_account_id,
+                            'provider_message_id' => $row->provider_message_id,
+                            'provider_thread_id' => $row->provider_thread_id,
+                            'sender_email' => $row->sender_email,
+                            'sender_domain' => $row->sender_domain,
+                            'received_at' => $row->received_at,
+                            'labels' => json_encode($labels),
+                            'is_archived' => ! in_array('INBOX', $labels, true),
+                            'is_deleted' => array_intersect(['TRASH', 'SPAM'], $labels) !== [],
+                            'created_at' => $now,
+                            'updated_at' => $now,
+                        ];
+                    })->all(),
+                    ['email_account_id', 'provider_message_id'],
+                    ['labels', 'is_archived', 'is_deleted', 'updated_at'],
+                );
+
+                $this->recount($rows->pluck('email_sender_id')->filter()->unique()->values()->all());
+            });
+        }
     }
 
     /**

@@ -44,6 +44,12 @@ class FakeEmailProvider implements EmailProviderInterface
     /** @var array<string, Throwable> thrown by the named method on its next call */
     public array $failNext = [];
 
+    /** @var list<array{account_id: int, to: string, subject: string, body: string}> */
+    public array $sent = [];
+
+    /** @var list<array{account_id: int, ids: list<string>, add: list<string>, remove: list<string>}> */
+    public array $modified = [];
+
     /** @var (callable(string): void)|null called before every sync method */
     public $beforeCall = null;
 
