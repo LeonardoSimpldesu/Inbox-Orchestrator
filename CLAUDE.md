@@ -62,6 +62,11 @@ Every query starts from the authenticated user: `User::emailAccounts()`, `sender
 - `GmailProviderService` throttles each account to `services.google.quota_units_per_minute` (RateLimiter, cost per Gmail method), batches 25 metadata reads and retries rate-limited items (429 / 403 `rateLimitExceeded`) with backoff. Errors surface as `ProviderUnavailable` (logged with account id + error type only), `HistoryExpired` or `ReauthorizationRequired`.
 - Queue workers keep code in memory: run `php artisan queue:restart` after PHP changes.
 
+### Subscription Hub
+- `EmailSender::subscriptions()` (`pendingSubscriptions`/`handledSubscriptions`) defines what the Hub lists; `SubscriptionController` paginates from `$user->senders()` with a constant number of queries (tests compare 1 vs 150 rows).
+- Unsubscribe runs in `UnsubscribeSenderJob`: `OneClickUnsubscriber` (RFC 8058 POST, **SSRF guard**: https only, every resolved IP must be global, connection pinned with `CURLOPT_RESOLVE`, no redirects; resolver behind `HostResolver`), `MailtoUnsubscriber` (`MailtoParser` rejects CR/LF outside the body), then `SenderMailCleaner` (Gmail `from:` listing + `batchModify` in 1,000-id blocks + `MessageStore::applyLabelChange`).
+- `unsubscribe_url`/`unsubscribe_mailto` never go into Inertia props or logs; the sender page is reached through `GET /subscriptions/{id}/page` (redirect in the user's browser). Logs carry `sender_id` + error code only.
+
 ### Frontend
 Inertia pages in `resources/js/Pages`, layouts `AppLayout` (authenticated) and `GuestLayout` (auth screens), shared inputs in `Components/`. Shared props are typed via module augmentation of `@inertiajs/core` (`InertiaConfig.sharedPageProps`) in `resources/js/types/inertia.d.ts`; domain types in `resources/js/types/index.d.ts`.
 

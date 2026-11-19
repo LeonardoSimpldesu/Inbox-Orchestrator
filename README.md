@@ -93,6 +93,17 @@ Só metadados são importados (remetente, assunto, data, labels e cabeçalhos de
 - **Cota do Gmail:** cada conta gasta no máximo `GMAIL_QUOTA_UNITS_PER_MINUTE` unidades por minuto (padrão 1.200, cerca de 240 e-mails por minuto). O limite real do projeto fica no Cloud Console, em *Gmail API > Quotas > "Units per minute per user"*. Se ele for maior, aumente o valor no `.env` (sem passar do limite).
 - Rodar manualmente: `docker exec inbox_app php artisan inbox:sync` ou `inbox:import-history`.
 
+## Hub de Assinaturas
+
+Menu **Assinaturas**: newsletters e e-mails promocionais das suas contas, do que mais manda para o que menos manda, 100 por página.
+
+- **Gmail** abre os e-mails do remetente no Gmail.
+- **Desinscrever** usa, na ordem de preferência, a desinscrição de um clique, um e-mail de desinscrição enviado pela sua conta, a página do remetente (você conclui lá) ou uma regra para os próximos e-mails.
+- Na confirmação dá para também **arquivar** ou **mandar para a lixeira** os e-mails que já existem daquele remetente.
+- A aba **Tratados** avisa quando um remetente continua mandando depois do pedido.
+
+A desinscrição de um clique é feita pelo servidor, e o endereço vem de um cabeçalho de e-mail. Por isso o app só chama hosts `https` públicos, valida e fixa o IP antes de conectar e não segue redirecionamentos.
+
 ## E-mail
 
 | Ambiente | Configuração |

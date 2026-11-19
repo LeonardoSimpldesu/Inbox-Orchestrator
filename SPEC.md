@@ -95,7 +95,11 @@ Indexação agregada de remetentes para triagem e desinscrição.
 - `unsubscribe_mailto` (String, Nullable)
 - `unsubscribe_url` (String, Nullable - só `https`)
 - `unsubscribe_one_click` (Boolean, Default false - aceita desinscrição de um clique, RFC 8058)
-- `unsubscribe_status` (Enum: `none`, `requested`, `unsubscribed`, `failed`)
+- `total_messages_promotional` (Integer, Default 0 - e-mails não deletados na aba Promoções)
+- `unsubscribe_method` (String, Nullable - `one_click`, `mailto`, `page`, `rule`)
+- `unsubscribe_requested_at` (Timestamp, Nullable)
+- `unsubscribe_error` (String, Nullable - código do último erro)
+- `unsubscribe_status` (Enum: `none`, `processing`, `requested`, `blocked` (regra criada), `failed`; não existe "desinscrito" porque não há como confirmar)
 - `last_email_received_at` (Timestamp, Nullable)
 - `created_at`, `updated_at`
 - *Unique:* `[email_account_id, email]`
@@ -165,17 +169,16 @@ Só metadados (remetente, assunto, data, labels, cabeçalhos de desinscrição);
 5. A tela Contas mostra "Importando e-mails recentes…", "Histórico importado até dd/mm/aaaa" ou "Histórico completo". Design: `docs/superpowers/specs/2026-11-18-gmail-sync-design.md`.
 
 ### 4.2. Hub de Assinaturas (Unsubscribe Manager)
-1. **Listagem Agregada:** Apresenta lista de remetentes com nome, domínio, total de e-mails, quantos estão não lidos e data do último recebido.
-2. **Deep-Link Direto para o Gmail:**
-   - Cada remetente ou mensagem possui um link direto:  
-     `https://mail.google.com/mail/u/?authuser={account_email}#search/from:{sender_email}`
-   - Para abrir uma mensagem/thread específica:  
-     `https://mail.google.com/mail/u/?authuser={account_email}#all/{provider_thread_id}`
-   - O e-mail abre diretamente na aba oficial do Gmail, com segurança, sem necessidade de baixar o corpo para o banco.
-3. **Ação "Desinscrever":**
-   - **Cenário A (HTTP One-Click):** Envia requisição POST/GET segura ao endpoint do remetente.
-   - **Cenário B (Mailto):** Envia e-mail de desinscrição padrão através da API do Gmail em nome do usuário.
-   - **Cenário C (Sem cabeçalho padrão):** Permite criar com 1 clique uma regra para arquivar ou enviar direto para a lixeira qualquer futuro e-mail daquele remetente.
+Página `/subscriptions`. Design: `docs/superpowers/specs/2026-11-19-subscription-hub-design.md`.
+1. **Só assinaturas:** remetentes com e-mails ativos e com cabeçalho de desinscrição **ou** com e-mails na aba Promoções. Os demais remetentes terão outra página (futuro).
+2. **Listagem:** 100 por página, do que mais manda para o que menos manda; filtro de conta; abas **Pendentes** (inclui falhas) e **Tratados** (com o aviso "Ainda mandou N e-mails depois do pedido").
+3. **Deep-link para o Gmail:** `https://mail.google.com/mail/u/?authuser={account_email}#search/from:{sender_email}` (valores codificados).
+4. **Desinscrever** (em fila, a tela mostra "Desinscrevendo…"):
+   - **Um clique (RFC 8058):** `POST` pelo servidor, só para hosts `https` públicos, com IP validado e fixado, sem redirecionamentos (proteção contra SSRF).
+   - **E-mail:** enviado pela conta via Gmail API (`gmail.send`), com o assunto e corpo do `mailto`.
+   - **Página do remetente:** aberta no navegador do usuário por uma rota do app (a URL nunca vai para a tela); a pessoa confirma "Já me desinscrevi".
+   - **Regra:** sem mecanismo, cria uma regra (`filter_type = sender`, `retention_days = 0`) para arquivar ou apagar os próximos e-mails; age quando o motor de TTL existir.
+5. **E-mails existentes:** na confirmação, manter (padrão), arquivar ou mandar para a lixeira todos os e-mails do remetente no Gmail (inclusive não importados), em lotes de 1.000.
 
 ### 4.3. Motor de Expiração e Retenção (TTL Engine)
 1. **Criação de Regras:**
@@ -227,7 +230,7 @@ app/
   - Requisito para as próximas etapas: jobs de sincronização e regras TTL devem ignorar contas de usuários desativados (`users.disabled_at`), e as consultas devem partir do usuário (`$user->emailAccounts()`, `senders()`, `retentionRules()`).
   - ✅ Conexão OAuth 2.0 com Gmail e armazenamento criptografado de tokens: tela Contas, reconectar, desconectar (soft delete), um Gmail por usuário, aviso de expiração do modo Teste.
   - ✅ Worker de sincronização de metadados e remetentes: recentes (3 meses), histórico em fatias, novidades a cada 5 min, sem duplicação e respeitando a cota do Gmail.
-  - Tela do Hub de Assinaturas com Unsubscribe e links diretos para o Gmail.
+  - ✅ Tela do Hub de Assinaturas com Unsubscribe e links diretos para o Gmail.
   - Tela de Regras de Expiração (TTL) com Dry-Run, execução diária e botão manual.
 
 * **Fase 2 (Follow-ups e Rotinas):**

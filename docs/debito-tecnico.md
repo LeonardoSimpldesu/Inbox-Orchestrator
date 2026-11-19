@@ -18,6 +18,7 @@ Itens conhecidos que ficaram para depois. Cada um traz o impacto, onde está e u
 | 12 | Conta parada mais de uma semana perde mudanças em e-mails antigos | Consistência de dados | Baixa |
 | 14 | Tela Contas não se atualiza sozinha durante a importação do histórico | UX | Baixa |
 | 15 | Funções de data do frontend sem testes | Qualidade | Baixa |
+| 16 | Hub de Assinaturas sem ações em massa nem busca | UX | Média |
 
 ---
 
@@ -169,4 +170,14 @@ Mesmo sem a expiração semanal, o refresh token ainda pode ser invalidado (senh
 **Onde:** `resources/js/lib/gmail.ts`.
 
 **Sugestão:** testes com `node --test` (como em `tests/js/`), cobrindo os limites de minuto, hora e dia e datas `YYYY-MM-DD`. Se o número de funções de frontend crescer, adotar o Vitest.
+
+## 16. Hub de Assinaturas sem ações em massa nem busca
+
+**Origem:** Hub de Assinaturas (2026-11-19).
+
+**O que acontece:** cada desinscrição é feita remetente a remetente, e não há busca por nome ou domínio. Com 150 assinaturas, tratar tudo exige muitos cliques e paginação.
+
+**Onde:** `SubscriptionController`, `resources/js/Pages/Subscriptions/Index.tsx`.
+
+**Sugestão:** caixa de busca (`name`/`email`/`domain` com `like`, mantendo consultas constantes) e seleção múltipla com "Desinscrever selecionados" despachando um `UnsubscribeSenderJob` por remetente, com o mesmo limite de ações por minuto.
 
