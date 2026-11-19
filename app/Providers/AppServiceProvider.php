@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use App\Contracts\EmailProviderInterface;
 use App\Services\Providers\GmailProviderService;
+use App\Services\Unsubscribe\DnsHostResolver;
+use App\Services\Unsubscribe\HostResolver;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 
@@ -15,6 +17,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(EmailProviderInterface::class, fn () => new GmailProviderService);
+        $this->app->bind(HostResolver::class, DnsHostResolver::class);
     }
 
     /**
