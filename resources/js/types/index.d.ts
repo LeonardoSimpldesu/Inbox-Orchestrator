@@ -41,3 +41,39 @@ export type SharedProps = {
     flash: Flash;
     status?: string | null;
 };
+
+export type UnsubscribeMethod = 'one_click' | 'mailto' | 'page' | 'rule';
+
+export interface SubscriptionRow {
+    id: number;
+    name: string | null;
+    email: string;
+    domain: string;
+    account_email: string;
+    total: number;
+    unread: number;
+    last_received_at: string | null;
+    status: 'none' | 'processing' | 'requested' | 'blocked' | 'failed';
+    method: UnsubscribeMethod | null;
+    error: string | null;
+    requested_at: string | null;
+    emails_after_request: number;
+    options: { one_click: boolean; mailto: boolean; page: boolean };
+    gmail_url: string;
+}
+
+export interface PaginationLink {
+    url: string | null;
+    label: string;
+    active: boolean;
+}
+
+export interface Paginated<T> {
+    data: T[];
+    current_page: number;
+    last_page: number;
+    total: number;
+    from: number | null;
+    to: number | null;
+    links: PaginationLink[];
+}
