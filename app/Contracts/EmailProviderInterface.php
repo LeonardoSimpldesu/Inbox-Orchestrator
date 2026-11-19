@@ -67,4 +67,32 @@ interface EmailProviderInterface
      * @throws ProviderUnavailable
      */
     public function listChanges(EmailAccount $account, string $startHistoryId, ?string $pageToken = null): ChangePage;
+
+    /**
+     * Sends a plain-text e-mail from the account (used for mailto unsubscribe).
+     *
+     * @throws ReauthorizationRequired
+     * @throws ProviderUnavailable
+     */
+    public function sendMessage(EmailAccount $account, string $to, string $subject, string $body): void;
+
+    /**
+     * Every message id matching the query (all pages).
+     *
+     * @return list<string>
+     *
+     * @throws ReauthorizationRequired
+     * @throws ProviderUnavailable
+     */
+    public function listAllMessageIds(EmailAccount $account, string $query): array;
+
+    /**
+     * @param  list<string>  $ids
+     * @param  list<string>  $addLabels
+     * @param  list<string>  $removeLabels
+     *
+     * @throws ReauthorizationRequired
+     * @throws ProviderUnavailable
+     */
+    public function batchModify(EmailAccount $account, array $ids, array $addLabels, array $removeLabels): void;
 }

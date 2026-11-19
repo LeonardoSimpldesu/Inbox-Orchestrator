@@ -80,11 +80,7 @@ class FakeEmailProvider implements EmailProviderInterface
         $this->hit('listMessageIds');
         $this->listCalls[] = ['query' => $query, 'pageToken' => $pageToken];
 
-        preg_match('/after:(\d+)/', $query, $after);
-        preg_match('/before:(\d+)/', $query, $before);
-
-        $matching = array_filter($this->mailbox, fn (MessageMetadata $m) => (! $after || $m->internalDate->timestamp >= (int) $after[1])
-            && (! $before || $m->internalDate->timestamp < (int) $before[1]));
+        $matching = $this->matching($query);
         usort($matching, fn (MessageMetadata $a, MessageMetadata $b) => $b->internalDate <=> $a->internalDate ?: strcmp($b->id, $a->id));
 
         $offset = (int) ($pageToken ?? 0);
@@ -111,6 +107,45 @@ class FakeEmailProvider implements EmailProviderInterface
         }
 
         return $page;
+    }
+
+    public function sendMessage(EmailAccount $account, string $to, string $subject, string $body): void
+    {
+        $this->hit('sendMessage');
+        $this->sent[] = ['account_id' => $account->id, 'to' => $to, 'subject' => $subject, 'body' => $body];
+    }
+
+    public function listAllMessageIds(EmailAccount $account, string $query): array
+    {
+        $this->hit('listAllMessageIds');
+        $this->listCalls[] = ['query' => $query, 'pageToken' => null];
+
+        return array_values(array_map(fn (MessageMetadata $m) => $m->id, $this->matching($query)));
+    }
+
+    public function batchModify(EmailAccount $account, array $ids, array $addLabels, array $removeLabels): void
+    {
+        $this->hit('batchModify');
+
+        if ($ids !== []) {
+            $this->modified[] = ['account_id' => $account->id, 'ids' => $ids, 'add' => $addLabels, 'remove' => $removeLabels];
+        }
+    }
+
+    /**
+     * Supports the after:/before: epoch filters and from:address used by the app.
+     *
+     * @return array<string, MessageMetadata>
+     */
+    private function matching(string $query): array
+    {
+        preg_match('/after:(\\d+)/', $query, $after);
+        preg_match('/before:(\\d+)/', $query, $before);
+        preg_match('/from:(\\S+)/', $query, $from);
+
+        return array_filter($this->mailbox, fn (MessageMetadata $m) => (! $after || $m->internalDate->timestamp >= (int) $after[1])
+            && (! $before || $m->internalDate->timestamp < (int) $before[1])
+            && (! $from || str_contains(strtolower((string) $m->from), strtolower($from[1]))));
     }
 
     private function hit(string $method): void

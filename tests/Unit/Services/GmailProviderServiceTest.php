@@ -561,4 +561,91 @@ class GmailProviderServiceTest extends TestCase
 
         $this->assertSame('Bearer refreshed-access', $this->history[1]['request']->getHeaderLine('Authorization'));
     }
+
+    private function decodeRaw(RequestInterface $request): string
+    {
+        $raw = json_decode((string) $request->getBody(), true)['raw'];
+
+        return base64_decode(strtr($raw, '-_', '+/'));
+    }
+
+    public function test_send_message_posts_raw_rfc2822(): void
+    {
+        $account = $this->connectedAccount();
+        $account->update(['account_email' => 'me@gmail.com']);
+
+        $this->service([$this->jsonResponse(['id' => 'sent-1'])])
+            ->sendMessage($account, 'unsub@news.com', 'Cancelar inscrição', "unsubscribe\nplease");
+
+        $request = $this->history[0]['request'];
+        $this->assertSame('POST', $request->getMethod());
+        $this->assertStringEndsWith('/gmail/v1/users/me/messages/send', $request->getUri()->getPath());
+
+        $mime = $this->decodeRaw($request);
+        $this->assertStringContainsString("From: me@gmail.com\r\n", $mime);
+        $this->assertStringContainsString("To: unsub@news.com\r\n", $mime);
+        $this->assertStringContainsString('Subject: =?UTF-8?B?'.base64_encode('Cancelar inscrição').'?='."\r\n", $mime);
+        $this->assertStringContainsString("Content-Type: text/plain; charset=UTF-8\r\n", $mime);
+        $this->assertStringEndsWith("\r\n\r\nunsubscribe\r\nplease", $mime);
+    }
+
+    public function test_send_message_strips_line_breaks_from_headers(): void
+    {
+        $this->service([$this->jsonResponse(['id' => 'sent-1'])])
+            ->sendMessage($this->connectedAccount(), "a@b.com\r\nBcc: x@evil.com", "Hi\r\nBcc: y@evil.com", 'body');
+
+        $mime = $this->decodeRaw($this->history[0]['request']);
+        $this->assertStringNotContainsString("\r\nBcc:", $mime);
+    }
+
+    public function test_list_all_message_ids_follows_pages(): void
+    {
+        $ids = $this->service([
+            $this->jsonResponse(['messages' => [['id' => 'a'], ['id' => 'b']], 'nextPageToken' => 'p2']),
+            $this->jsonResponse(['messages' => [['id' => 'c']]]),
+        ])->listAllMessageIds($this->connectedAccount(), 'from:news@site.com');
+
+        $this->assertSame(['a', 'b', 'c'], $ids);
+        $first = $this->queryOf((string) $this->history[0]['request']->getUri());
+        $second = $this->queryOf((string) $this->history[1]['request']->getUri());
+        $this->assertSame('from:news@site.com', $first['q']);
+        $this->assertSame('500', $first['maxResults']);
+        $this->assertSame('p2', $second['pageToken']);
+    }
+
+    public function test_batch_modify_splits_in_blocks_of_1000(): void
+    {
+        $ids = array_map(fn ($i) => "m{$i}", range(1, 2500));
+
+        $this->service([new Response(204), new Response(204), new Response(204)])
+            ->batchModify($this->connectedAccount(), $ids, ['TRASH'], ['INBOX']);
+
+        $this->assertCount(3, $this->history);
+        $bodies = array_map(fn ($entry) => json_decode((string) $entry['request']->getBody(), true), $this->history);
+        $this->assertCount(1000, $bodies[0]['ids']);
+        $this->assertCount(500, $bodies[2]['ids']);
+        $this->assertSame(['TRASH'], $bodies[0]['addLabelIds']);
+        $this->assertSame(['INBOX'], $bodies[0]['removeLabelIds']);
+        $this->assertStringEndsWith('/messages/batchModify', $this->history[0]['request']->getUri()->getPath());
+    }
+
+    public function test_batch_modify_with_no_ids_makes_no_request(): void
+    {
+        $this->service()->batchModify($this->connectedAccount(), [], [], ['INBOX']);
+
+        $this->assertCount(0, $this->history);
+    }
+
+    public function test_send_charges_100_quota_units(): void
+    {
+        Sleep::fake();
+        config(['services.google.quota_units_per_minute' => 150]);
+        $account = $this->connectedAccount();
+
+        $service = $this->service([$this->jsonResponse(['id' => '1']), $this->jsonResponse(['id' => '2'])]);
+        $service->sendMessage($account, 'a@b.com', 's', 'b');
+        $service->sendMessage($account, 'a@b.com', 's', 'b');
+
+        Sleep::assertSleptTimes(1);
+    }
 }

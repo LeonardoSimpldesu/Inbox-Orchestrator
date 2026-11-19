@@ -14,6 +14,7 @@ use Google\Client;
 use Google\Http\Batch;
 use Google\Service\Exception as GoogleServiceException;
 use Google\Service\Gmail;
+use Google\Service\Gmail\BatchModifyMessagesRequest;
 use Google\Service\Gmail\Message;
 use GuzzleHttp\ClientInterface;
 use Illuminate\Support\Facades\RateLimiter;
@@ -44,6 +45,14 @@ class GmailProviderService implements EmailProviderInterface
     private const COST_MESSAGES_LIST = 5;
 
     private const COST_MESSAGES_GET = 5;
+
+    private const COST_MESSAGES_SEND = 100;
+
+    private const COST_BATCH_MODIFY = 50;
+
+    private const LIST_ALL_PAGE_SIZE = 500;
+
+    private const BATCH_MODIFY_SIZE = 1000;
 
     private const RATE_LIMIT_RETRIES = 3;
 
@@ -246,6 +255,55 @@ class GmailProviderService implements EmailProviderInterface
             historyId: (string) $response->getHistoryId(),
             nextPageToken: $response->getNextPageToken(),
         );
+    }
+
+    public function sendMessage(EmailAccount $account, string $to, string $subject, string $body): void
+    {
+        $gmail = $this->gmail($account);
+        $header = fn (string $value) => str_replace(["\r", "\n"], '', $value);
+
+        $mime = implode("\r\n", [
+            'From: '.$header($account->account_email),
+            'To: '.$header($to),
+            'Subject: =?UTF-8?B?'.base64_encode($header($subject)).'?=',
+            'MIME-Version: 1.0',
+            'Content-Type: text/plain; charset=UTF-8',
+            'Content-Transfer-Encoding: 8bit',
+            '',
+            preg_replace("/\r\n|\r|\n/", "\r\n", $body),
+        ]);
+
+        $message = new Message(['raw' => rtrim(strtr(base64_encode($mime), '+/', '-_'), '=')]);
+
+        $this->call($account, fn () => $gmail->users_messages->send('me', $message), self::COST_MESSAGES_SEND);
+    }
+
+    public function listAllMessageIds(EmailAccount $account, string $query): array
+    {
+        $ids = [];
+        $pageToken = null;
+
+        do {
+            $page = $this->listMessageIds($account, $query, $pageToken, self::LIST_ALL_PAGE_SIZE);
+            array_push($ids, ...$page->ids);
+            $pageToken = $page->nextPageToken;
+        } while ($pageToken !== null);
+
+        return $ids;
+    }
+
+    public function batchModify(EmailAccount $account, array $ids, array $addLabels, array $removeLabels): void
+    {
+        foreach (array_chunk($ids, self::BATCH_MODIFY_SIZE) as $chunk) {
+            $gmail = $this->gmail($account);
+            $request = new BatchModifyMessagesRequest([
+                'ids' => $chunk,
+                'addLabelIds' => $addLabels,
+                'removeLabelIds' => $removeLabels,
+            ]);
+
+            $this->call($account, fn () => $gmail->users_messages->batchModify('me', $request), self::COST_BATCH_MODIFY);
+        }
     }
 
     private function gmail(EmailAccount $account): Gmail
