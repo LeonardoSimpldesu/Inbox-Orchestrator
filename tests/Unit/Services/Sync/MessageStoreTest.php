@@ -102,6 +102,17 @@ class MessageStoreTest extends TestCase
         $this->assertSame(1, $this->sender('news@site.com')->total_messages_unread);
     }
 
+    public function test_promotional_messages_are_counted(): void
+    {
+        $this->store->store($this->account, [
+            $this->message('p1', overrides: ['labelIds' => ['INBOX', 'CATEGORY_PROMOTIONS']]),
+            $this->message('p2', overrides: ['labelIds' => ['CATEGORY_PROMOTIONS', 'TRASH']]),
+            $this->message('u1', overrides: ['labelIds' => ['INBOX', 'CATEGORY_UPDATES']]),
+        ]);
+
+        $this->assertSame(1, $this->sender('news@site.com')->total_messages_promotional);
+    }
+
     public function test_archived_flag_from_inbox_label(): void
     {
         $this->store->store($this->account, [$this->message('m1', overrides: ['labelIds' => ['CATEGORY_UPDATES']])]);

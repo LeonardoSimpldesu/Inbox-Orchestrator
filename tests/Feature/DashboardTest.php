@@ -32,6 +32,7 @@ class DashboardTest extends TestCase
             'domain' => str($email)->after('@')->toString(),
             'total_messages_received' => 1,
             'total_messages_unread' => 1,
+            'unsubscribe_mailto' => 'mailto:unsubscribe@'.str($email)->after('@'),
         ]);
     }
 
@@ -173,5 +174,18 @@ class DashboardTest extends TestCase
             )
         );
         $response->assertDontSee($user->password, escape: false);
+    }
+
+    public function test_dashboard_counts_pending_subscriptions_only(): void
+    {
+        $user = User::factory()->create();
+        $account = $this->accountFor($user, 'me@gmail.com');
+        $base = ['email_account_id' => $account->id, 'total_messages_received' => 2];
+        EmailSender::create($base + ['email' => 'a@x.com', 'domain' => 'x.com', 'unsubscribe_mailto' => 'mailto:u@x.com']);
+        EmailSender::create($base + ['email' => 'b@x.com', 'domain' => 'x.com', 'unsubscribe_mailto' => 'mailto:u@x.com', 'unsubscribe_status' => 'requested']);
+        EmailSender::create($base + ['email' => 'friend@y.com', 'domain' => 'y.com']);
+        EmailSender::create(['email_account_id' => $account->id, 'email' => 'old@x.com', 'domain' => 'x.com', 'total_messages_received' => 0, 'unsubscribe_mailto' => 'mailto:u@x.com']);
+
+        $this->actingAs($user)->get('/')->assertInertia(fn (Assert $page) => $page->where('stats.totalSenders', 1));
     }
 }

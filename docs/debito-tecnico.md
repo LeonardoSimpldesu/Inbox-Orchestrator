@@ -16,7 +16,6 @@ Itens conhecidos que ficaram para depois. Cada um traz o impacto, onde está e u
 | 10 | Sessão expirada durante o consentimento do Google gera erro de validação | UX | Baixa |
 | 11 | Novidades do Gmail por polling (5 min) em vez de notificações push | Desempenho / tempo real | Média (quando houver servidor público) |
 | 12 | Conta parada mais de uma semana perde mudanças em e-mails antigos | Consistência de dados | Baixa |
-| 13 | "Assinaturas detectadas" conta remetentes sem e-mails ativos | Dados exibidos | Média (resolver no Hub) |
 | 14 | Tela Contas não se atualiza sozinha durante a importação do histórico | UX | Baixa |
 | 15 | Funções de data do frontend sem testes | Qualidade | Baixa |
 
@@ -150,16 +149,6 @@ Mesmo sem a expiração semanal, o refresh token ainda pode ser invalidado (senh
 **Onde:** `EmailSyncService::applyChanges` (tratamento de `HistoryExpired`).
 
 **Sugestão:** ao detectar `HistoryExpired`, marcar a conta para uma releitura completa em fatias (zerar `history_completed_at` e reiniciar `oldest_synced_at` a partir de agora), reaproveitando o modo `History`. As gravações já são idempotentes.
-
-## 13. "Assinaturas detectadas" conta remetentes sem e-mails ativos
-
-**Origem:** sincronização Gmail (2026-11-18).
-
-**O que acontece:** o painel mostra `stats.totalSenders`, que conta todas as linhas de `email_senders`. Um remetente cujos e-mails foram todos para a lixeira ou apagados continua contando, com `total_messages_received = 0`.
-
-**Onde:** `DashboardController` (`$user->senders()->count()`).
-
-**Sugestão:** contar só `total_messages_received > 0`, e usar o mesmo filtro na listagem do Hub de Assinaturas. Teste: remetente com todos os e-mails na lixeira não conta.
 
 ## 14. Tela Contas não se atualiza sozinha durante a importação do histórico
 

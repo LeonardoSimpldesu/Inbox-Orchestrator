@@ -15,7 +15,7 @@ class DashboardController extends Controller
         return Inertia::render('Dashboard', [
             'accounts' => $user->emailAccounts()->get()->map->summary(),
             'stats' => [
-                'totalSenders' => $user->senders()->count(),
+                'totalSenders' => $user->senders()->pendingSubscriptions()->count(),
                 'archivedCount' => 0,
             ],
             'recentRules' => $user->retentionRules()

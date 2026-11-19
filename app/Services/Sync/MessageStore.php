@@ -177,6 +177,7 @@ class MessageStore
         EmailSender::whereIn('id', $senderIds)->update([
             'total_messages_received' => DB::raw("(select count(*) {$alive})"),
             'total_messages_unread' => DB::raw("(select count(*) {$alive} and m.labels like '%\"UNREAD\"%')"),
+            'total_messages_promotional' => DB::raw("(select count(*) {$alive} and m.labels like '%\"CATEGORY_PROMOTIONS\"%')"),
             'last_email_received_at' => DB::raw("(select max(m.received_at) {$alive})"),
             'updated_at' => now(),
         ]);
