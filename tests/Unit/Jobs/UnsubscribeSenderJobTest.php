@@ -162,6 +162,28 @@ class UnsubscribeSenderJobTest extends TestCase
         });
     }
 
+    public function test_crashed_job_does_not_leave_sender_processing(): void
+    {
+        Log::spy();
+        $sender = $this->sender();
+
+        (new UnsubscribeSenderJob($sender->id, 'one_click', 'keep'))->failed(new \RuntimeException('worker killed'));
+
+        $this->assertSame(EmailSender::STATUS_FAILED, $sender->fresh()->unsubscribe_status);
+        $this->assertSame('request_failed', $sender->fresh()->unsubscribe_error);
+
+        (new UnsubscribeSenderJob(999999, 'one_click', 'keep'))->failed(new \RuntimeException('gone'));
+    }
+
+    public function test_crash_after_success_keeps_requested_status(): void
+    {
+        $sender = $this->sender(['unsubscribe_status' => EmailSender::STATUS_REQUESTED]);
+
+        (new UnsubscribeSenderJob($sender->id, 'mailto', 'archive'))->failed(new \RuntimeException('cleanup crashed'));
+
+        $this->assertSame(EmailSender::STATUS_REQUESTED, $sender->fresh()->unsubscribe_status);
+    }
+
     public function test_job_lock_and_queue(): void
     {
         $job = new UnsubscribeSenderJob(42, 'mailto', 'keep');

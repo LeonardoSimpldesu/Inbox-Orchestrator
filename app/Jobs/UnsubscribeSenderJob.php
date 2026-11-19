@@ -14,6 +14,7 @@ use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
+use Throwable;
 
 class UnsubscribeSenderJob implements ShouldQueue
 {
@@ -84,6 +85,19 @@ class UnsubscribeSenderJob implements ShouldQueue
             $code = 'cleanup_'.$this->errorCode($e);
             $sender->forceFill(['unsubscribe_error' => $code])->save();
             Log::warning('Unsubscribe cleanup failed.', ['sender_id' => $sender->id, 'error' => $code]);
+        }
+    }
+
+    /**
+     * A crashed or killed run must not leave the sender stuck in "processing",
+     * where the Hub hides the retry button.
+     */
+    public function failed(Throwable $exception): void
+    {
+        $sender = EmailSender::find($this->senderId);
+
+        if ($sender?->unsubscribe_status === EmailSender::STATUS_PROCESSING) {
+            $this->markFailed($sender, 'request_failed');
         }
     }
 
