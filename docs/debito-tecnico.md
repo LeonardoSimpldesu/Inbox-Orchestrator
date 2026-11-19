@@ -19,6 +19,8 @@ Itens conhecidos que ficaram para depois. Cada um traz o impacto, onde está e u
 | 14 | Tela Contas não se atualiza sozinha durante a importação do histórico | UX | Baixa |
 | 15 | Funções de data do frontend sem testes | Qualidade | Baixa |
 | 16 | Hub de Assinaturas sem ações em massa nem busca | UX | Média |
+| 17 | Remetente "Tratado" não pode ser refeito nem desfeito pelo Hub | UX | Baixa |
+| 18 | Regras criadas pelo Hub só podem ser removidas quando existir a tela de regras | UX | Baixa (resolver na etapa de TTL) |
 
 ---
 
@@ -180,4 +182,24 @@ Mesmo sem a expiração semanal, o refresh token ainda pode ser invalidado (senh
 **Onde:** `SubscriptionController`, `resources/js/Pages/Subscriptions/Index.tsx`.
 
 **Sugestão:** caixa de busca (`name`/`email`/`domain` com `like`, mantendo consultas constantes) e seleção múltipla com "Desinscrever selecionados" despachando um `UnsubscribeSenderJob` por remetente, com o mesmo limite de ações por minuto.
+
+## 17. Remetente "Tratado" não pode ser refeito nem desfeito pelo Hub
+
+**Origem:** Hub de Assinaturas (2026-11-19).
+
+**O que acontece:** depois de "Desinscrição pedida" ou "Regra criada", o remetente vai para a aba Tratados, que não tem botões. Se o remetente continuar mandando ("Ainda mandou N e-mails depois do pedido"), não dá para tentar outro método nem voltar o remetente para Pendentes.
+
+**Onde:** `resources/js/Pages/Subscriptions/Index.tsx`, `SubscriptionController::unsubscribe`.
+
+**Sugestão:** na aba Tratados, botão "Tentar de novo" (abre o mesmo diálogo) e "Voltar para pendentes" (status `none`, sem apagar a regra).
+
+## 18. Regras criadas pelo Hub só podem ser removidas quando existir a tela de regras
+
+**Origem:** Hub de Assinaturas (2026-11-19).
+
+**O que acontece:** "Criar regra" grava uma `retention_rules` (remetente, 0 dias). Ainda não há tela para listar, editar ou apagar regras.
+
+**Onde:** `retention_rules`; tela de Regras de TTL (próxima etapa da Fase 1).
+
+**Sugestão:** a tela de regras de TTL deve listar também as regras com `filter_type = sender` e permitir apagá-las; ao apagar, voltar o remetente para `none` se o status for `blocked`.
 
