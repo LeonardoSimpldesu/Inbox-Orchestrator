@@ -127,7 +127,21 @@ export default function RetentionRuleForm({ accounts, rule, onClose }: Retention
 
                 <div>
                     <label className={labelClass} htmlFor="rule-account">Conta</label>
-                    <select id="rule-account" className={input} value={form.data.email_account_id} onChange={(e) => form.setData('email_account_id', Number(e.target.value))}>
+                    <select
+                        id="rule-account"
+                        className={input}
+                        value={form.data.email_account_id}
+                        onChange={(e) => {
+                            // Labels belong to one account: drop the old list and any picked label.
+                            setLabels([]);
+                            form.setData((data) => ({
+                                ...data,
+                                email_account_id: Number(e.target.value),
+                                filter_value: data.filter_type === 'label' ? '' : data.filter_value,
+                                target_label: '',
+                            }));
+                        }}
+                    >
                         {accounts.map((account) => <option key={account.id} value={account.id}>{account.account_email}</option>)}
                     </select>
                     {error('email_account_id')}

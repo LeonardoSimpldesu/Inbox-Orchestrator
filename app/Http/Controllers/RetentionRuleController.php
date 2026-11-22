@@ -150,7 +150,7 @@ class RetentionRuleController extends Controller
             return back()->with('error', 'Nenhuma regra ativa para executar.');
         }
 
-        $rules->each(fn (RetentionRule $rule) => ExecuteRetentionRuleJob::dispatch($rule->id));
+        $rules->each(fn (RetentionRule $rule) => ExecuteRetentionRuleJob::dispatch($rule->id, $rule->email_account_id));
 
         return back()->with('success', 'Execução das regras iniciada.');
     }

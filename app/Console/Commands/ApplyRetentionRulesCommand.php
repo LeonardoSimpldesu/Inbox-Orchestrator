@@ -44,7 +44,7 @@ class ApplyRetentionRulesCommand extends Command
             ->get()
             ->reject(fn (RetentionRule $rule) => $rule->account->needsReauth());
 
-        $rules->each(fn (RetentionRule $rule) => ExecuteRetentionRuleJob::dispatch($rule->id));
+        $rules->each(fn (RetentionRule $rule) => ExecuteRetentionRuleJob::dispatch($rule->id, $rule->email_account_id));
 
         $this->info("Execução enfileirada para {$rules->count()} regra(s).");
 

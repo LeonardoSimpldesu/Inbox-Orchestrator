@@ -14,13 +14,12 @@ class RuleSimulator
 
     public function __construct(
         private readonly EmailProviderInterface $provider,
-        private readonly TargetLabel $targetLabel,
+        private readonly RuleMatcher $matcher,
     ) {}
 
     public function simulate(RetentionRule $rule): SimulationResult
     {
-        $query = RuleQuery::for($rule, $this->targetLabel->nameFor($rule));
-        $ids = $this->provider->listAllMessageIds($rule->account, $query->query, $query->labelIds, self::COUNT_CAP + 1);
+        $ids = $this->matcher->ids($rule, RuleQuery::for($rule), self::COUNT_CAP + 1);
 
         $capped = count($ids) > self::COUNT_CAP;
         $total = min(count($ids), self::COUNT_CAP);

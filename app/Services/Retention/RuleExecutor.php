@@ -12,7 +12,7 @@ class RuleExecutor
     public function __construct(
         private readonly EmailProviderInterface $provider,
         private readonly MessageStore $store,
-        private readonly TargetLabel $targetLabel,
+        private readonly RuleMatcher $matcher,
     ) {}
 
     /**
@@ -20,8 +20,10 @@ class RuleExecutor
      */
     public function execute(RetentionRule $rule): int
     {
+        $query = RuleQuery::for($rule);
+
         try {
-            $query = RuleQuery::for($rule, $this->targetLabel->nameFor($rule));
+            $ids = $this->matcher->ids($rule, $query);
         } catch (LabelMissing) {
             $rule->forceFill(['is_active' => false])->save();
             $rule->logExecution('failed', 0, 'label_missing');
@@ -30,7 +32,6 @@ class RuleExecutor
         }
 
         $account = $rule->account;
-        $ids = $this->provider->listAllMessageIds($account, $query->query, $query->labelIds);
 
         $this->provider->batchModify($account, $ids, $query->add, $query->remove);
         $this->store->applyLabelChange($account, $ids, $query->add, $query->remove);

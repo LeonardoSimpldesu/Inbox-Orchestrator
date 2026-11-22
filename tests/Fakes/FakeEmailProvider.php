@@ -180,15 +180,14 @@ class FakeEmailProvider implements EmailProviderInterface
         preg_match('/from:(\\S+)/', $query, $from);
 
         preg_match('/older_than:(\\d+)d/', $query, $olderThan);
-        preg_match('/-label:"([^"]*)"/', $query, $notLabel);
-        $inInbox = str_contains($query, 'in:inbox');
-        $excludedLabelId = $notLabel ? collect($this->labels)->firstWhere('name', $notLabel[1])['id'] ?? null : null;
+        $notInInbox = str_contains($query, '-in:inbox');
+        $inInbox = ! $notInInbox && str_contains($query, 'in:inbox');
 
         return array_filter($this->mailbox, fn (MessageMetadata $m) => array_diff($labelIds, $m->labelIds) === []
             && (! $olderThan || $m->internalDate->lessThan(now()->subDays((int) $olderThan[1])))
             && (! $inInbox || in_array('INBOX', $m->labelIds, true))
+            && (! $notInInbox || ! in_array('INBOX', $m->labelIds, true))
             && (! str_contains($query, '-is:starred') || ! in_array('STARRED', $m->labelIds, true))
-            && ($excludedLabelId === null || ! in_array($excludedLabelId, $m->labelIds, true))
             && (! $after || $m->internalDate->timestamp >= (int) $after[1])
             && (! $before || $m->internalDate->timestamp < (int) $before[1])
             && (! $from || str_contains(strtolower((string) $m->from), strtolower($from[1]))));

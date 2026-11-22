@@ -2,7 +2,6 @@
 
 namespace App\Services\Retention;
 
-use App\Exceptions\LabelMissing;
 use App\Models\RetentionRule;
 use InvalidArgumentException;
 
@@ -19,18 +18,18 @@ final readonly class RuleQuery
      * @param  list<string>  $labelIds
      * @param  list<string>  $add
      * @param  list<string>  $remove
+     * @param  list<string>  $excludeLabelIds
      */
     private function __construct(
         public string $query,
         public array $labelIds,
         public array $add,
         public array $remove,
+        public ?string $excludeQuery = null,
+        public array $excludeLabelIds = [],
     ) {}
 
-    /**
-     * @param  string|null  $targetLabelName  current name of the rule's target label (add_label only)
-     */
-    public static function for(RetentionRule $rule, ?string $targetLabelName = null): self
+    public static function for(RetentionRule $rule): self
     {
         $terms = [self::ALWAYS_EXCLUDED];
         $labelIds = [];
@@ -57,17 +56,19 @@ final readonly class RuleQuery
             $terms[] = 'in:inbox';
         }
 
+        $query = implode(' ', $terms);
+
+        // Mail that already has the target label is left out by subtracting ids (listed
+        // with the label's id), so label names never have to be written in a search.
+        // With "also archive", labeled mail still in the inbox stays in.
         if ($rule->action === 'add_label') {
-            if ($targetLabelName === null) {
-                throw new LabelMissing('label_missing');
-            }
-
-            $withoutLabel = '-label:"'.str_replace('"', '', $targetLabelName).'"';
-
-            // With "also archive", labeled mail still in the inbox must match too ({a b} = OR).
-            $terms[] = $rule->archive_after_label ? '{'.$withoutLabel.' in:inbox}' : $withoutLabel;
+            return new self(
+                $query, $labelIds, $add, $remove,
+                excludeQuery: $rule->archive_after_label ? $query.' -in:inbox' : $query,
+                excludeLabelIds: [...$labelIds, $rule->target_label],
+            );
         }
 
-        return new self(implode(' ', $terms), $labelIds, $add, $remove);
+        return new self($query, $labelIds, $add, $remove);
     }
 }

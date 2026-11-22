@@ -83,10 +83,14 @@ class ExecuteRetentionRuleJobTest extends RetentionTestCase
 
     public function test_lock_and_queue(): void
     {
-        $job = new ExecuteRetentionRuleJob(9);
+        $job = new ExecuteRetentionRuleJob(9, 5);
 
-        $this->assertSame(1, $job->tries);
-        [$lock] = $job->middleware();
+        $this->assertSame(10, $job->tries);
+        $this->assertSame(1, $job->maxExceptions);
+        [$lock, $accountLock] = $job->middleware();
+        $this->assertSame('sync-account-5', $accountLock->key);
+        $this->assertSame(60, $accountLock->releaseAfter);
+        $this->assertSame(1600, $accountLock->expiresAfter);
         $this->assertInstanceOf(WithoutOverlapping::class, $lock);
         $this->assertSame('retention-rule-9', $lock->key);
         $this->assertNull($lock->releaseAfter);

@@ -15,19 +15,32 @@ class ExecuteRetentionRuleJob implements ShouldQueue
 {
     use Queueable;
 
-    public int $tries = 1;
+    /** Retries only cover waiting for the account lock; a real failure stops at the first exception. */
+    public int $tries = 10;
+
+    public int $maxExceptions = 1;
 
     /** Must stay below the queue's retry_after (DB_QUEUE_RETRY_AFTER). */
     public int $timeout = 1500;
 
-    public function __construct(public readonly int $ruleId) {}
+    public function __construct(
+        public readonly int $ruleId,
+        public readonly ?int $accountId = null,
+    ) {}
 
     /**
      * @return list<object>
      */
     public function middleware(): array
     {
-        return [(new WithoutOverlapping("retention-rule-{$this->ruleId}"))->expireAfter(1600)->dontRelease()];
+        $middleware = [(new WithoutOverlapping("retention-rule-{$this->ruleId}"))->expireAfter(1600)->dontRelease()];
+
+        // Shares the account's sync lock so a run never overwrites labels a sync is saving.
+        if ($this->accountId !== null) {
+            $middleware[] = (new WithoutOverlapping("sync-account-{$this->accountId}"))->expireAfter(1600)->releaseAfter(60);
+        }
+
+        return $middleware;
     }
 
     public function handle(RuleExecutor $executor): void

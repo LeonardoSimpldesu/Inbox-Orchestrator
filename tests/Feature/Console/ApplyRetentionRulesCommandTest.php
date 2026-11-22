@@ -64,6 +64,7 @@ class ApplyRetentionRulesCommandTest extends TestCase
         $this->artisan('inbox:apply-retention');
 
         $this->assertSame([$yesterday->id, $never->id], $this->dispatched());
+        Queue::assertPushed(ExecuteRetentionRuleJob::class, fn (ExecuteRetentionRuleJob $job) => $job->ruleId === $never->id && $job->accountId === $never->email_account_id);
     }
 
     public function test_skips_paused_and_unsyncable(): void

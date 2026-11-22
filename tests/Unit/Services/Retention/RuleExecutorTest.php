@@ -47,6 +47,20 @@ class RuleExecutorTest extends RetentionTestCase
         $this->assertSame(2, EmailMessageMeta::where('is_deleted', true)->count());
     }
 
+    public function test_add_label_skips_mail_already_labeled_whatever_the_label_name(): void
+    {
+        $this->provider->labels = [['id' => 'Label_1', 'name' => 'Notas "Fiscais"/Ação 2026']];
+        $this->promotions(2, prefix: 'todo');
+        $this->promotions(1, labels: ['CATEGORY_PROMOTIONS', 'Label_1'], prefix: 'done');
+        $this->promotions(1, labels: ['INBOX', 'CATEGORY_PROMOTIONS', 'Label_1'], prefix: 'labeled-inbox');
+
+        $this->assertSame(2, $this->executor()->execute($this->rule(['action' => 'add_label', 'target_label' => 'Label_1'])));
+        $this->assertEqualsCanonicalizing(['todo0', 'todo1'], $this->provider->modified[0]['ids']);
+
+        $this->assertSame(3, $this->executor()->execute($this->rule(['action' => 'add_label', 'target_label' => 'Label_1', 'archive_after_label' => true])));
+        $this->assertEqualsCanonicalizing(['todo0', 'todo1', 'labeled-inbox0'], $this->provider->modified[1]['ids']);
+    }
+
     public function test_zero_matches_still_logged(): void
     {
         $this->assertSame(0, $this->executor()->execute($this->rule()));

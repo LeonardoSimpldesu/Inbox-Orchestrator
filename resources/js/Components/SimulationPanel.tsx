@@ -40,7 +40,9 @@ export default function SimulationPanel({ simulation, rule, onClose }: Simulatio
 
             {simulation.sample.length > 0 && (
                 <div className="mt-4 overflow-x-auto">
-                    <p className="mb-2 text-xs text-slate-400">Amostra dos mais antigos:</p>
+                    <p className="mb-2 text-xs text-slate-400">
+                        {simulation.capped ? 'Amostra (a execução também alcança e-mails mais antigos que estes):' : 'Amostra dos mais antigos:'}
+                    </p>
                     <table className="w-full text-xs">
                         <tbody className="divide-y divide-slate-800">
                             {simulation.sample.map((message, index) => (

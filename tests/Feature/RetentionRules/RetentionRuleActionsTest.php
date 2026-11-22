@@ -69,7 +69,7 @@ class RetentionRuleActionsTest extends RetentionRulesTestCase
             ->assertSessionHas('success', 'Execução das regras iniciada.');
 
         Queue::assertPushed(ExecuteRetentionRuleJob::class, 1);
-        Queue::assertPushed(ExecuteRetentionRuleJob::class, fn (ExecuteRetentionRuleJob $job) => $job->ruleId === $active->id);
+        Queue::assertPushed(ExecuteRetentionRuleJob::class, fn (ExecuteRetentionRuleJob $job) => $job->ruleId === $active->id && $job->accountId === $this->account->id);
     }
 
     public function test_run_now_without_rules(): void

@@ -2,7 +2,6 @@
 
 namespace Tests\Unit\Services\Retention;
 
-use App\Exceptions\LabelMissing;
 use App\Models\RetentionRule;
 use App\Services\Retention\RuleQuery;
 use PHPUnit\Framework\TestCase;
@@ -49,35 +48,34 @@ class RuleQueryTest extends TestCase
         $this->assertSame(['Label_42'], $query->labelIds);
     }
 
-    public function test_add_label_excludes_already_labeled(): void
+    public function test_add_label_excludes_already_labeled_by_id(): void
     {
-        $query = RuleQuery::for(
-            $this->rule(['filter_type' => 'domain', 'filter_value' => 'nubank.com.br', 'action' => 'add_label', 'target_label' => 'Label_7']),
-            'Notas "Fiscais"/2026',
-        );
+        $query = RuleQuery::for($this->rule(['filter_type' => 'domain', 'filter_value' => 'nubank.com.br', 'action' => 'add_label', 'target_label' => 'Label_7']));
 
-        $this->assertSame('-is:starred -in:sent -in:drafts from:@nubank.com.br -label:"Notas Fiscais/2026"', $query->query);
+        $this->assertSame('-is:starred -in:sent -in:drafts from:@nubank.com.br', $query->query);
+        $this->assertSame('-is:starred -in:sent -in:drafts from:@nubank.com.br', $query->excludeQuery);
+        $this->assertSame(['Label_7'], $query->excludeLabelIds);
         $this->assertSame(['Label_7'], $query->add);
         $this->assertSame([], $query->remove);
     }
 
     public function test_add_label_and_archive(): void
     {
-        $query = RuleQuery::for(
-            $this->rule(['filter_type' => 'sender', 'filter_value' => 'a@b.com', 'action' => 'add_label', 'target_label' => 'Label_7', 'archive_after_label' => true]),
-            'Banco',
-        );
+        $query = RuleQuery::for($this->rule(['filter_type' => 'label', 'filter_value' => 'Label_1', 'action' => 'add_label', 'target_label' => 'Label_7', 'archive_after_label' => true]));
 
-        $this->assertSame('-is:starred -in:sent -in:drafts from:a@b.com {-label:"Banco" in:inbox}', $query->query);
+        $this->assertSame('-is:starred -in:sent -in:drafts', $query->query);
+        $this->assertSame('-is:starred -in:sent -in:drafts -in:inbox', $query->excludeQuery);
+        $this->assertSame(['Label_1', 'Label_7'], $query->excludeLabelIds);
         $this->assertSame(['Label_7'], $query->add);
         $this->assertSame(['INBOX'], $query->remove);
     }
 
-    public function test_add_label_without_name_throws(): void
+    public function test_other_actions_have_no_exclusion(): void
     {
-        $this->expectException(LabelMissing::class);
+        $query = RuleQuery::for($this->rule(['filter_type' => 'category', 'filter_value' => 'promotions', 'action' => 'trash']));
 
-        RuleQuery::for($this->rule(['filter_type' => 'sender', 'filter_value' => 'a@b.com', 'action' => 'add_label', 'target_label' => 'Label_7']));
+        $this->assertNull($query->excludeQuery);
+        $this->assertSame([], $query->excludeLabelIds);
     }
 
     public function test_unknown_category_throws(): void
