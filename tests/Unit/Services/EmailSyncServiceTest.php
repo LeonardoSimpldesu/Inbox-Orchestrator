@@ -314,4 +314,31 @@ class EmailSyncServiceTest extends TestCase
         $this->assertFalse(SyncMode::Recent->isScheduled());
         $this->assertFalse(SyncMode::HistoryNow->isScheduled());
     }
+
+    public function test_expired_history_restarts_the_older_mail_import(): void
+    {
+        $this->account->update(['history_id' => '1', 'oldest_synced_at' => '2019-01-01 00:00:00', 'history_completed_at' => '2026-10-01 00:00:00']);
+        $this->seedMailbox(2);
+        $this->provider->changePages = [new HistoryExpired('history_expired')];
+
+        $this->service()->run($this->account, SyncMode::Changes);
+
+        $account = $this->account->fresh();
+        $this->assertNull($account->history_completed_at);
+        $this->assertTrue($account->oldest_synced_at->greaterThan(CarbonImmutable::parse('2026-08-19')));
+        $this->assertSame('importing_history', $account->syncState());
+    }
+
+    public function test_manual_history_import_clears_its_flag(): void
+    {
+        $this->account->update(['history_id' => '1', 'oldest_synced_at' => '2026-01-01 00:00:00', 'history_import_requested_at' => now()]);
+
+        $this->service()->run($this->account, SyncMode::HistoryNow);
+        $this->assertNull($this->account->fresh()->history_import_requested_at);
+
+        $this->account->update(['history_import_requested_at' => now()]);
+        $this->provider->failNext['listMessageIds'] = new ProviderUnavailable('rate_limited');
+        $this->service()->run($this->account->fresh(), SyncMode::HistoryNow);
+        $this->assertNull($this->account->fresh()->history_import_requested_at);
+    }
 }

@@ -101,4 +101,15 @@ class SyncEmailAccountJobTest extends TestCase
         $this->assertStringNotContainsString('secret-access', $payload);
         $this->assertStringNotContainsString('secret-refresh', $payload);
     }
+
+    public function test_crashed_manual_import_clears_its_flag(): void
+    {
+        $account = EmailAccount::factory()->create(['history_import_requested_at' => now()]);
+
+        (new SyncEmailAccountJob($account->id, SyncMode::Changes))->failed(new \RuntimeException('x'));
+        $this->assertNotNull($account->fresh()->history_import_requested_at);
+
+        (new SyncEmailAccountJob($account->id, SyncMode::HistoryNow))->failed(new \RuntimeException('x'));
+        $this->assertNull($account->fresh()->history_import_requested_at);
+    }
 }

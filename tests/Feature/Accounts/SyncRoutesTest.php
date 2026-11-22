@@ -28,6 +28,7 @@ class SyncRoutesTest extends AccountsTestCase
             ->assertSessionHas('success', 'Importação do histórico iniciada. Pode levar até 20 minutos.');
 
         Queue::assertPushed(SyncEmailAccountJob::class, fn (SyncEmailAccountJob $job) => $job->accountId === $account->id && $job->mode === SyncMode::HistoryNow);
+        $this->assertNotNull($account->fresh()->history_import_requested_at);
     }
 
     public function test_import_history_404_for_other_users_account(): void

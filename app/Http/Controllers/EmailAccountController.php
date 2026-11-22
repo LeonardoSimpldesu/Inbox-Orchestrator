@@ -118,6 +118,7 @@ class EmailAccountController extends Controller
             return $this->back(error: 'Reconecte a conta antes de importar o histórico.');
         }
 
+        $emailAccount->forceFill(['history_import_requested_at' => now()])->save();
         SyncEmailAccountJob::dispatch($emailAccount->id, SyncMode::HistoryNow);
 
         return $this->back(success: 'Importação do histórico iniciada. Pode levar até 20 minutos.');

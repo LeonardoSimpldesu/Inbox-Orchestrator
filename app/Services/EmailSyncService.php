@@ -51,6 +51,10 @@ class EmailSyncService
             ]);
 
             return;
+        } finally {
+            if ($mode === SyncMode::HistoryNow) {
+                $account->forceFill(['history_import_requested_at' => null])->save();
+            }
         }
 
         if ($finished) {
@@ -125,6 +129,10 @@ class EmailSyncService
                 }
             } while ($pageToken !== null);
         } catch (HistoryExpired) {
+            // Changes older than the recent window were missed while the account was idle:
+            // walk the whole mailbox again (writes are idempotent).
+            $account->forceFill(['oldest_synced_at' => null, 'history_completed_at' => null])->save();
+
             return $this->importRecent($account);
         }
 

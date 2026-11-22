@@ -244,9 +244,21 @@ class EmailAccountTest extends TestCase
         DB::disableQueryLog();
 
         $this->assertSame([], $queries);
-        $this->assertSame(['state', 'oldest_synced_at', 'last_synced_at'], array_keys($summary['sync']));
+        $this->assertSame(['state', 'oldest_synced_at', 'last_synced_at', 'manual_import'], array_keys($summary['sync']));
         $this->assertSame('importing_history', $summary['sync']['state']);
         $this->assertSame('2024-03-12', $summary['sync']['oldest_synced_at']);
         $this->assertSame($summary['last_synced_at'], $summary['sync']['last_synced_at']);
+    }
+
+    public function test_summary_reports_a_recent_manual_history_import(): void
+    {
+        $account = EmailAccount::factory()->create(['history_id' => '1', 'history_import_requested_at' => now()->subMinutes(5)]);
+        $this->assertTrue($account->summary()['sync']['manual_import']);
+
+        $account->history_import_requested_at = now()->subMinutes(31);
+        $this->assertFalse($account->summary()['sync']['manual_import']);
+
+        $account->history_import_requested_at = null;
+        $this->assertFalse($account->summary()['sync']['manual_import']);
     }
 }

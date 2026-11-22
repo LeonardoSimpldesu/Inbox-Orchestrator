@@ -19,6 +19,9 @@ class EmailAccount extends Model
 
     private const EXPIRING_SOON_DAYS = 2;
 
+    /** Longest a manual history import runs (20 min budget) plus slack. */
+    private const MANUAL_IMPORT_WINDOW_MINUTES = 30;
+
     protected $fillable = [
         'user_id',
         'provider',
@@ -32,6 +35,7 @@ class EmailAccount extends Model
         'last_synced_at',
         'oldest_synced_at',
         'history_completed_at',
+        'history_import_requested_at',
     ];
 
     /**
@@ -52,6 +56,7 @@ class EmailAccount extends Model
         'last_synced_at' => 'datetime',
         'oldest_synced_at' => 'datetime',
         'history_completed_at' => 'datetime',
+        'history_import_requested_at' => 'datetime',
     ];
 
     /**
@@ -120,7 +125,7 @@ class EmailAccount extends Model
     }
 
     /**
-     * @return array{id: int, provider: string, account_email: string, last_synced_at: ?string, status: 'connected'|'needs_reauth', reconnect_by: ?string, expiring_soon: bool, sync: array{state: string, oldest_synced_at: ?string, last_synced_at: ?string}}
+     * @return array{id: int, provider: string, account_email: string, last_synced_at: ?string, status: 'connected'|'needs_reauth', reconnect_by: ?string, expiring_soon: bool, sync: array{state: string, oldest_synced_at: ?string, last_synced_at: ?string, manual_import: bool}}
      */
     public function summary(): array
     {
@@ -136,6 +141,7 @@ class EmailAccount extends Model
                 'state' => $this->syncState(),
                 'oldest_synced_at' => $this->oldest_synced_at?->toDateString(),
                 'last_synced_at' => $this->last_synced_at?->toIso8601String(),
+                'manual_import' => $this->history_import_requested_at?->isAfter(now()->subMinutes(self::MANUAL_IMPORT_WINDOW_MINUTES)) ?? false,
             ],
         ];
     }

@@ -24,18 +24,18 @@ function disconnect(account: EmailAccountSummary): void {
 }
 
 export default function AccountsIndex({ accounts, testingMode }: AccountsIndexProps) {
-    const importingRecent = accounts.some((account) => account.sync.state === 'importing_recent');
+    const importing = accounts.some((account) => account.sync.state === 'importing_recent' || account.sync.manual_import);
     const { start, stop } = usePoll(15_000, { only: ['accounts'] }, { autoStart: false });
 
     useEffect(() => {
-        if (importingRecent) {
+        if (importing) {
             start();
         } else {
             stop();
         }
 
         return stop;
-    }, [importingRecent, start, stop]);
+    }, [importing, start, stop]);
 
     return (
         <AppLayout title="Contas">
@@ -86,7 +86,7 @@ export default function AccountsIndex({ accounts, testingMode }: AccountsIndexPr
                                     </div>
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2">
-                                    {account.sync.state === 'importing_history' && account.status === 'connected' && (
+                                    {account.sync.state === 'importing_history' && account.status === 'connected' && !account.sync.manual_import && (
                                         <button
                                             type="button"
                                             onClick={() => importHistory(account.id)}

@@ -8,6 +8,14 @@ export default function AccountSyncProgress({ sync }: { sync: EmailAccountSummar
         return <p className="text-xs text-sky-300">Importando e-mails recentes…</p>;
     }
 
+    if (sync.manual_import && sync.state === 'importing_history') {
+        return (
+            <p className="text-xs text-sky-300">
+                Importando histórico…{sync.oldest_synced_at ? ` já chegou em ${formatDate(sync.oldest_synced_at)}` : ''}
+            </p>
+        );
+    }
+
     if (sync.state === 'complete') {
         return <p className="text-xs text-slate-400">Histórico completo{synced}</p>;
     }

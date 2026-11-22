@@ -10,6 +10,7 @@ export interface EmailAccountSummary {
         state: 'importing_recent' | 'importing_history' | 'complete';
         oldest_synced_at: string | null;
         last_synced_at: string | null;
+        manual_import: boolean;
     };
 }
 

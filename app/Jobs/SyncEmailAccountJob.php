@@ -8,6 +8,7 @@ use App\Services\Sync\SyncMode;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
+use Throwable;
 
 /**
  * Receives the account id, not the model, so tokens never end up in the queue payload.
@@ -52,6 +53,13 @@ class SyncEmailAccountJob implements ShouldQueue
 
         if ($account !== null) {
             $service->run($account, $this->mode);
+        }
+    }
+
+    public function failed(Throwable $exception): void
+    {
+        if ($this->mode === SyncMode::HistoryNow) {
+            EmailAccount::whereKey($this->accountId)->update(['history_import_requested_at' => null]);
         }
     }
 
