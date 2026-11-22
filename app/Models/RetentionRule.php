@@ -60,6 +60,16 @@ class RetentionRule extends Model
         return $this->simulated_at !== null;
     }
 
+    public function logExecution(string $status, int $affected = 0, ?string $error = null): void
+    {
+        $this->executionLogs()->create([
+            'status' => $status,
+            'affected_messages_count' => $affected,
+            'error_message' => $error,
+            'executed_at' => now(),
+        ]);
+    }
+
     public function scopeActive(Builder $query): void
     {
         $query->where('retention_rules.is_active', true);

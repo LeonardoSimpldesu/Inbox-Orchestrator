@@ -50,6 +50,9 @@ class FakeEmailProvider implements EmailProviderInterface
     /** @var list<array{id: string, name: string}> */
     public array $labels = [];
 
+    /** @var list<string>|null when set, listAllMessageIds returns these ids (cheap large listings) */
+    public ?array $listAllOverride = null;
+
     /** @var list<array{account_id: int, ids: list<string>, add: list<string>, remove: list<string>}> */
     public array $modified = [];
 
@@ -127,7 +130,11 @@ class FakeEmailProvider implements EmailProviderInterface
     public function listAllMessageIds(EmailAccount $account, string $query, array $labelIds = [], ?int $limit = null): array
     {
         $this->hit('listAllMessageIds');
-        $this->listCalls[] = ['query' => $query, 'pageToken' => null, 'labelIds' => $labelIds];
+        $this->listCalls[] = ['query' => $query, 'pageToken' => null, 'labelIds' => $labelIds, 'limit' => $limit];
+
+        if ($this->listAllOverride !== null) {
+            return $limit === null ? $this->listAllOverride : array_slice($this->listAllOverride, 0, $limit);
+        }
 
         $matching = $this->matching($query, $labelIds);
         usort($matching, fn (MessageMetadata $a, MessageMetadata $b) => $b->internalDate <=> $a->internalDate ?: strcmp($b->id, $a->id));
@@ -173,12 +180,15 @@ class FakeEmailProvider implements EmailProviderInterface
         preg_match('/from:(\\S+)/', $query, $from);
 
         preg_match('/older_than:(\\d+)d/', $query, $olderThan);
+        preg_match('/-label:"([^"]*)"/', $query, $notLabel);
         $inInbox = str_contains($query, 'in:inbox');
+        $excludedLabelId = $notLabel ? collect($this->labels)->firstWhere('name', $notLabel[1])['id'] ?? null : null;
 
         return array_filter($this->mailbox, fn (MessageMetadata $m) => array_diff($labelIds, $m->labelIds) === []
             && (! $olderThan || $m->internalDate->lessThan(now()->subDays((int) $olderThan[1])))
             && (! $inInbox || in_array('INBOX', $m->labelIds, true))
             && (! str_contains($query, '-is:starred') || ! in_array('STARRED', $m->labelIds, true))
+            && ($excludedLabelId === null || ! in_array($excludedLabelId, $m->labelIds, true))
             && (! $after || $m->internalDate->timestamp >= (int) $after[1])
             && (! $before || $m->internalDate->timestamp < (int) $before[1])
             && (! $from || str_contains(strtolower((string) $m->from), strtolower($from[1]))));
