@@ -67,6 +67,9 @@ return [
 
     'timezone' => env('APP_TIMEZONE', 'UTC'),
 
+    // Time zone of the user-facing schedule (retention rules run after 03:00 here).
+    'schedule_timezone' => env('APP_SCHEDULE_TIMEZONE', 'America/Sao_Paulo'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Locale Configuration
