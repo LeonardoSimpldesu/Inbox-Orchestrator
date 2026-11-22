@@ -3,6 +3,7 @@
 namespace Tests\Feature\Settings;
 
 use App\Models\User;
+use Illuminate\Support\Facades\Auth;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Fortify\Actions\EnableTwoFactorAuthentication;
 use Tests\TestCase;
@@ -76,5 +77,23 @@ class SecurityPageTest extends TestCase
 
         $this->post('/login', ['email' => 'user@example.com', 'password' => 'password'])
             ->assertRedirect('/settings/security');
+    }
+
+    public function test_password_login_counts_as_a_recent_password_confirmation(): void
+    {
+        User::factory()->create(['email' => 'user@example.com']);
+
+        $this->post('/login', ['email' => 'user@example.com', 'password' => 'password'])->assertRedirect('/');
+
+        $this->get('/settings/security')->assertOk();
+    }
+
+    public function test_remember_cookie_login_still_asks_for_the_password(): void
+    {
+        $user = User::factory()->create(['remember_token' => 'remember-me-token']);
+        $recaller = [Auth::guard('web')->getRecallerName() => $user->id.'|remember-me-token|'.$user->password];
+
+        $this->withCookies($recaller)->get('/settings/security')->assertRedirect('/user/confirm-password');
+        $this->assertAuthenticatedAs($user);
     }
 }

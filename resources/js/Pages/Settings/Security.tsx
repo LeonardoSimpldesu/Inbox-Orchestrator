@@ -31,20 +31,40 @@ export default function Security({ twoFactorEnabled, twoFactorPending, status }:
     const [setup, setSetup] = useState<SetupData | null>(null);
     const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
     const [busy, setBusy] = useState(false);
+    const [loadError, setLoadError] = useState<{ message: string; retry: () => void } | null>(null);
     const confirmForm = useForm({ code: '' });
 
-    const loadSetup = useCallback(async () => {
-        const [qr, key] = await Promise.all([
-            window.axios.get<{ svg: string }>('/user/two-factor-qr-code'),
-            window.axios.get<{ secretKey: string }>('/user/two-factor-secret-key'),
-        ]);
-        setSetup({ svg: qr.data.svg, secretKey: key.data.secretKey });
+    // Fortify answers 423 once the 3-hour password confirmation expires: ask for the password again.
+    const handleLoadFailure = useCallback((error: unknown, retry: () => void) => {
+        if (window.axios.isAxiosError(error) && error.response?.status === 423) {
+            router.visit('/user/confirm-password');
+            return;
+        }
+        setLoadError({ message: 'Não foi possível carregar os dados da verificação em duas etapas.', retry });
     }, []);
 
+    const loadSetup = useCallback(async () => {
+        setLoadError(null);
+        try {
+            const [qr, key] = await Promise.all([
+                window.axios.get<{ svg: string }>('/user/two-factor-qr-code'),
+                window.axios.get<{ secretKey: string }>('/user/two-factor-secret-key'),
+            ]);
+            setSetup({ svg: qr.data.svg, secretKey: key.data.secretKey });
+        } catch (error) {
+            handleLoadFailure(error, () => void loadSetup());
+        }
+    }, [handleLoadFailure]);
+
     const loadRecoveryCodes = useCallback(async () => {
-        const response = await window.axios.get<string[]>('/user/two-factor-recovery-codes');
-        setRecoveryCodes(response.data);
-    }, []);
+        setLoadError(null);
+        try {
+            const response = await window.axios.get<string[]>('/user/two-factor-recovery-codes');
+            setRecoveryCodes(response.data);
+        } catch (error) {
+            handleLoadFailure(error, () => void loadRecoveryCodes());
+        }
+    }, [handleLoadFailure]);
 
     useEffect(() => {
         if (twoFactorPending) {
@@ -101,6 +121,14 @@ export default function Security({ twoFactorEnabled, twoFactorPending, status }:
 
                 <div className="mt-6">
                     <StatusMessage message={status ? STATUS_MESSAGES[status] : null} />
+                    {loadError && (
+                        <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-rose-500/40 bg-rose-950/60 p-3 text-sm text-rose-300">
+                            <span>{loadError.message}</span>
+                            <button type="button" onClick={loadError.retry} className="text-xs font-semibold underline underline-offset-2 hover:text-rose-200 cursor-pointer">
+                                Tentar de novo
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 <section className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 mt-2">

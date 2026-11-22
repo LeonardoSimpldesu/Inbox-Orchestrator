@@ -176,4 +176,14 @@ class TwoFactorAuthenticationTest extends TestCase
         $response->assertDontSee($user->two_factor_secret, escape: false);
         $response->assertDontSee($this->recoveryCodes($user)[0], escape: false);
     }
+
+    public function test_two_factor_login_counts_as_a_recent_password_confirmation(): void
+    {
+        $user = $this->userWithConfirmedTwoFactor();
+        $this->loginExpectingChallenge();
+
+        $this->post('/two-factor-challenge', ['code' => $this->currentCode($user)])->assertRedirect('/');
+
+        $this->get('/settings/security')->assertOk();
+    }
 }
