@@ -6,6 +6,7 @@
         "dev": "vite",
         "audit:prod": "npm audit --omit=dev",
         "test:security": "node --test \"tests/js/**/*.test.mjs\"",
+        "test:js": "node --test \"tests/js/**/*.test.ts\"",
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {
