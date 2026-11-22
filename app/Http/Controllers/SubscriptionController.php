@@ -28,7 +28,7 @@ class SubscriptionController extends Controller
 
         $scoped = fn () => $user->senders()
             ->when($accountId, fn (Builder $query) => $query->where('email_accounts.id', $accountId))
-            ->when($search !== '', fn (Builder $query) => $this->search($query, $search));
+            ->when($search !== '', fn (Builder $query) => $query->search($search));
 
         $subscriptions = $scoped()
             ->{$status === 'handled' ? 'handledSubscriptions' : 'pendingSubscriptions'}()
@@ -176,16 +176,6 @@ class SubscriptionController extends Controller
         abort_if($url === null, 404);
 
         return redirect()->away($url);
-    }
-
-    private function search(Builder $query, string $search): void
-    {
-        $term = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], mb_strtolower($search)).'%';
-
-        $query->where(fn (Builder $q) => $q
-            ->whereRaw("lower(email_senders.name) like ? escape '\\'", [$term])
-            ->orWhereRaw("lower(email_senders.email) like ? escape '\\'", [$term])
-            ->orWhereRaw("lower(email_senders.domain) like ? escape '\\'", [$term]));
     }
 
     private function startUnsubscribe(EmailSender $sender): string

@@ -43,6 +43,7 @@ class EmailSender extends Model
         'unsubscribe_method',
         'unsubscribe_requested_at',
         'unsubscribe_error',
+        'label_applying_at',
         'last_email_received_at',
     ];
 
@@ -52,6 +53,7 @@ class EmailSender extends Model
         'total_messages_unread' => 'integer',
         'total_messages_promotional' => 'integer',
         'unsubscribe_requested_at' => 'datetime',
+        'label_applying_at' => 'datetime',
         'unsubscribe_one_click' => 'boolean',
     ];
 
@@ -65,6 +67,31 @@ class EmailSender extends Model
             ->where(fn (Builder $q) => $q->whereNotNull('email_senders.unsubscribe_url')
                 ->orWhereNotNull('email_senders.unsubscribe_mailto')
                 ->orWhere('email_senders.total_messages_promotional', '>', 0));
+    }
+
+    /**
+     * Everyone the Hub leaves out: still sending, with no unsubscribe mechanism
+     * and nothing in Gmail's Promotions.
+     */
+    public function scopeNonSubscriptions(Builder $query): void
+    {
+        $query->where('email_senders.total_messages_received', '>', 0)
+            ->whereNull('email_senders.unsubscribe_url')
+            ->whereNull('email_senders.unsubscribe_mailto')
+            ->where('email_senders.total_messages_promotional', 0);
+    }
+
+    /**
+     * Case-insensitive match on name, e-mail or domain; LIKE wildcards in the term are literal.
+     */
+    public function scopeSearch(Builder $query, string $term): void
+    {
+        $like = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], mb_strtolower($term)).'%';
+
+        $query->where(fn (Builder $q) => $q
+            ->whereRaw("lower(email_senders.name) like ? escape '\\'", [$like])
+            ->orWhereRaw("lower(email_senders.email) like ? escape '\\'", [$like])
+            ->orWhereRaw("lower(email_senders.domain) like ? escape '\\'", [$like]));
     }
 
     public function scopePendingSubscriptions(Builder $query): void

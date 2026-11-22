@@ -98,4 +98,26 @@ class EmailSenderTest extends TestCase
             $this->senderOn($account, 'c@c.com', ['total_messages_promotional' => 1])->unsubscribeOptions(),
         );
     }
+
+    public function test_non_subscriptions_scope(): void
+    {
+        $account = EmailAccount::factory()->create();
+        $this->senderOn($account, 'news@a.com', ['unsubscribe_mailto' => 'mailto:u@a.com']);
+        $this->senderOn($account, 'promo@b.com', ['total_messages_promotional' => 1]);
+        $this->senderOn($account, 'maria@gmail.com');
+        $this->senderOn($account, 'bank@c.com');
+
+        $this->assertSame(['bank@c.com', 'maria@gmail.com'], EmailSender::nonSubscriptions()->orderBy('email')->pluck('email')->all());
+    }
+
+    public function test_search_scope_escapes_wildcards(): void
+    {
+        $account = EmailAccount::factory()->create();
+        $this->senderOn($account, 'maria@gmail.com', ['name' => 'Maria Souza']);
+        $this->senderOn($account, 'bank@c.com', ['name' => '100% Banco']);
+
+        $this->assertSame(['maria@gmail.com'], EmailSender::search('SOUZA')->pluck('email')->all());
+        $this->assertSame(['bank@c.com'], EmailSender::search('100%')->pluck('email')->all());
+        $this->assertSame([], EmailSender::search('_')->pluck('email')->all());
+    }
 }
