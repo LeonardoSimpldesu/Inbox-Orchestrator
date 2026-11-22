@@ -87,6 +87,15 @@ class SenderListTest extends SendersTestCase
         );
     }
 
+    public function test_page_survives_gmail_outage_when_filtering_by_account(): void
+    {
+        $this->sender();
+        $this->provider->failNext['listLabels'] = new ProviderUnavailable('request_failed');
+
+        $this->actingAs($this->user)->get("/senders?account={$this->account->id}")->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->where('labels', []));
+    }
+
     public function test_isolated_per_user(): void
     {
         $this->sender(['email' => 'other@x.com'], EmailAccount::factory()->create());

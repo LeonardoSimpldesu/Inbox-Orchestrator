@@ -24,8 +24,8 @@ interface EmailProviderInterface
     public function exchangeCode(string $code): OAuthGrant;
 
     /**
-     * @throws ReauthorizationRequired
-     * @throws OAuthExchangeFailed
+     * @throws ReauthorizationRequired when Google revoked the grant (invalid_grant)
+     * @throws ProviderUnavailable on transient failures (network, Google errors)
      */
     public function refreshAccessToken(EmailAccount $account): string;
 

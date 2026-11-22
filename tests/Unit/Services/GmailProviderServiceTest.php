@@ -230,10 +230,23 @@ class GmailProviderServiceTest extends TestCase
 
         try {
             $this->service([$this->jsonResponse(['error' => 'internal_failure'], 500)])->refreshAccessToken($account);
-            $this->fail('Expected OAuthExchangeFailed');
-        } catch (OAuthExchangeFailed $e) {
+            $this->fail('Expected ProviderUnavailable');
+        } catch (ProviderUnavailable $e) {
             $this->assertSame('internal_failure', $e->getMessage());
             $this->assertNull($account->fresh()->reauth_required_at);
+        }
+    }
+
+    public function test_network_failure_while_refreshing_is_a_provider_outage(): void
+    {
+        $account = EmailAccount::factory()->create(['token_expires_at' => now()->subMinute()]);
+
+        try {
+            $this->service([new ConnectException('down', new Request('POST', 'x'))])
+                ->listLabels($account);
+            $this->fail('Expected ProviderUnavailable');
+        } catch (ProviderUnavailable $e) {
+            $this->assertSame('request_failed', $e->getMessage());
         }
     }
 

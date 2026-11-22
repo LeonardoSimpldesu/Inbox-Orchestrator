@@ -126,7 +126,8 @@ class GmailProviderService implements EmailProviderInterface
                 throw new ReauthorizationRequired('invalid_grant', previous: $e);
             }
 
-            throw $e;
+            // Anything else (network, Google 5xx) is transient: callers treat it like any outage.
+            throw new ProviderUnavailable($e->getMessage(), previous: $e);
         }
 
         $account->forceFill([
