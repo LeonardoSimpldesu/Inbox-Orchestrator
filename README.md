@@ -132,6 +132,7 @@ docker exec inbox_app php artisan test --coverage # cobertura (meta: 100% de app
 npm run typecheck                                 # TypeScript strict
 npm run build                                     # build de produção
 npm run test:security                             # o Vite não pode servir arquivos sensíveis
+npm run test:js                                   # funções puras do frontend (datas)
 ```
 
 - O grupo `audit` consulta as bases de vulnerabilidades do Composer e do npm e precisa de internet. Para rodar offline: `php artisan test --exclude-group=audit`.

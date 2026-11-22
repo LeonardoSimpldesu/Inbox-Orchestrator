@@ -28,10 +28,11 @@ docker exec inbox_app php artisan migrate
 docker exec inbox_app php artisan optimize:clear       # needed after Inertia/Blade upgrades (stale compiled views)
 npm run typecheck                                      # tsc --noEmit
 npm run build
-npm run test:security                                  # node --test tests/js: Vite must not serve sensitive files
+npm run test:security                                  # node --test tests/js/*.test.mjs: Vite must not serve sensitive files
+npm run test:js                                        # node --test tests/js/*.test.ts: pure frontend helpers (resources/js/lib/dates.ts)
 ```
 
-**Before any merge into `main` or opening a PR, run all of the above checks** (full PHPUnit incl. audit, typecheck, build, test:security), again on the merged result. After merging into `main`, push `main`.
+**Before any merge into `main` or opening a PR, run all of the above checks** (full PHPUnit incl. audit, typecheck, build, test:security, test:js), again on the merged result. After merging into `main`, push `main`.
 
 User management (no public registration): `php artisan user:create|user:disable|user:enable|user:delete|user:reset-two-factor` (see README).
 
@@ -68,8 +69,8 @@ Every query starts from the authenticated user: `User::emailAccounts()`, `sender
 - `unsubscribe_url`/`unsubscribe_mailto` never go into Inertia props or logs; the sender page is reached through `GET /subscriptions/{id}/page` (redirect in the user's browser). Logs carry `sender_id` + error code only.
 
 ### Retention rules (TTL)
-- `RuleQuery::for($rule, $targetLabelName)` turns a rule into a Gmail search (`q` + `labelIds`) and the label changes; it always adds `-is:starred -in:sent -in:drafts`. `RuleSimulator` (count capped at 10,000 + 20 oldest as sample) and `RuleExecutor` (list all → `batchModify` → `MessageStore::applyLabelChange`) share it, so the simulated count is what runs. `TargetLabel` resolves the target label name by id; a missing label pauses the rule (`label_missing`).
-- Rules start paused; `canActivate()` requires `simulated_at`, and any edit clears it. `inbox:apply-retention` runs hourly and dispatches `ExecuteRetentionRuleJob` for active rules not run since today's 03:00 in `config('app.schedule_timezone')`. Every simulation/run/failure goes to `rule_execution_logs` (error = code only).
+- `RuleQuery::for($rule)` turns a rule into a Gmail search (`q` + `labelIds`) and the label changes; it always adds `-is:starred -in:sent -in:drafts`. For "add label" it also describes an exclusion listing (by label **id**, never by name) that `RuleMatcher` subtracts. `RuleMatcher` checks the rule's labels still exist (`LabelMissing` → the executor pauses the rule) and is shared by `RuleSimulator` (count capped at 10,000 + sample) and `RuleExecutor` (list → `batchModify` → `MessageStore::applyLabelChange`), so the simulated count is what runs.
+- Rules start paused; `canActivate()` requires `simulated_at`, and any edit clears it. `inbox:apply-retention` runs hourly and dispatches `ExecuteRetentionRuleJob` for active rules not run since today's 03:00 in `config('app.schedule_timezone')`. Every simulation/run/failure goes to `rule_execution_logs` (error = code only); after 3 failures in a day a rule waits for the next day. `ExecuteRetentionRuleJob` also takes the account's `sync-account-{id}` lock so a run and a sync never write labels at the same time.
 - Controllers look rules up with `whereIn(email_account_id, user's accounts)` (not the `hasManyThrough`, whose `laravel_through_key` must not reach saved models). Label ids in forms are validated against the account's Gmail labels.
 
 ### Frontend
