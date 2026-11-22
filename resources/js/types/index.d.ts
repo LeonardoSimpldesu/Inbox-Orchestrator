@@ -77,3 +77,44 @@ export interface Paginated<T> {
     to: number | null;
     links: PaginationLink[];
 }
+
+export type RuleFilterType = 'category' | 'domain' | 'sender' | 'label';
+export type RuleAction = 'archive' | 'trash' | 'add_label';
+
+export interface RuleLog {
+    status: 'success' | 'simulated' | 'failed';
+    affected: number;
+    error: string | null;
+    executed_at: string | null;
+}
+
+export interface RetentionRuleRow {
+    id: number;
+    name: string;
+    email_account_id: number;
+    account_email: string;
+    filter_type: RuleFilterType;
+    filter_value: string;
+    filter_label: string | null;
+    retention_days: number;
+    action: RuleAction;
+    target_label: string | null;
+    target_label_name: string | null;
+    archive_after_label: boolean;
+    is_active: boolean;
+    can_activate: boolean;
+    last_run_at: string | null;
+    logs: RuleLog[];
+}
+
+export interface RuleSimulation {
+    rule_id: number;
+    total: number;
+    capped: boolean;
+    sample: { sender: string; subject: string | null; date: string }[];
+}
+
+export interface GmailLabel {
+    id: string;
+    name: string;
+}
