@@ -73,7 +73,7 @@ GOOGLE_OAUTH_TESTING=true
 ```
 
 - Em modo *Testing* o Google expira o acesso 7 dias depois de cada conexão. O app mostra "Reconecte até dd/mm" e avisa no painel. Soluções definitivas: [`docs/debito-tecnico.md`](docs/debito-tecnico.md), item 7.
-- **Desconectar** revoga o acesso no Google, mas guarda remetentes e regras: reconectar a mesma conta traz tudo de volta.
+- **Desconectar** revoga o acesso no Google, mas guarda remetentes e regras por **90 dias** (`DISCONNECTED_ACCOUNT_RETENTION_DAYS`): reconectar a mesma conta nesse prazo traz tudo de volta. Depois disso, `inbox:purge-disconnected-accounts` (de hora em hora) apaga a conta e os dados dela.
 - Um Gmail só pode estar conectado por um usuário de cada vez.
 - O app pede todas as permissões. Se alguma for desmarcada na tela do Google, a conexão é recusada.
 
@@ -100,7 +100,8 @@ Menu **Assinaturas**: newsletters e e-mails promocionais das suas contas, do que
 - **Gmail** abre os e-mails do remetente no Gmail.
 - **Desinscrever** usa, na ordem de preferência, a desinscrição de um clique, um e-mail de desinscrição enviado pela sua conta, a página do remetente (você conclui lá) ou uma regra para os próximos e-mails.
 - Na confirmação dá para também **arquivar** ou **mandar para a lixeira** os e-mails que já existem daquele remetente.
-- A aba **Tratados** avisa quando um remetente continua mandando depois do pedido.
+- A aba **Tratados** avisa quando um remetente continua mandando depois do pedido, e permite **Tentar de novo** ou **Voltar para pendentes** (a regra criada, se houver, continua na tela de Regras).
+- **Busca** por nome, e-mail ou domínio e **seleção múltipla**: "Desinscrever selecionados" usa só a desinscrição automática (um clique ou e-mail); remetentes que precisam da página ou de uma regra são pulados e avisados.
 
 A desinscrição de um clique é feita pelo servidor, e o endereço vem de um cabeçalho de e-mail. Por isso o app só chama hosts `https` públicos, valida e fixa o IP antes de conectar e não segue redirecionamentos.
 
@@ -110,6 +111,7 @@ Menu **Regras TTL**: regras como "Promoções com mais de 15 dias → arquivar",
 
 - Toda regra nasce **pausada**. Clique em **Simular** para ver quantos e-mails ela afetaria hoje e uma amostra, e só então em **Ativar**. Editar uma regra a pausa de novo.
 - A busca é feita no próprio Gmail, então alcança a caixa inteira (não só o que já foi importado).
+- **Todas as contas** (ao criar) faz uma cópia pausada da regra em cada conta; cada cópia é simulada e ativada na própria linha. Não vale para marcadores, que são de cada conta.
 - Nunca são tocados: e-mails com estrela, enviados, rascunhos e spam.
 - As regras ativas rodam uma vez por dia, na primeira hora depois das 03:00 (`APP_SCHEDULE_TIMEZONE`), e pelo botão **Executar regras agora**. Rodar manualmente: `docker exec inbox_app php artisan inbox:apply-retention`.
 - Arquivados ficam em "Todos os e-mails" e a lixeira do Gmail guarda os e-mails por 30 dias: dá para desfazer pelo próprio Gmail.
