@@ -11,7 +11,8 @@ import {
     ShieldCheck, 
     AlertCircle,
     CheckCircle2,
-    Mail
+    Mail,
+    Users
 } from 'lucide-react';
 
 interface AppLayoutProps {
@@ -55,6 +56,13 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                         >
                             <MailCheck className="w-4 h-4 text-emerald-400" />
                             <span className="whitespace-nowrap">Assinaturas</span>
+                        </Link>
+                        <Link
+                            href="/senders"
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-slate-400 hover:bg-slate-800/80 hover:text-slate-200 transition"
+                        >
+                            <Users className="w-4 h-4 text-sky-400" />
+                            <span className="whitespace-nowrap">Remetentes</span>
                         </Link>
                         <Link 
                             href="/retention-rules" 

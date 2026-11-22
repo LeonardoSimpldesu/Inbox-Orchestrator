@@ -119,3 +119,19 @@ export interface GmailLabel {
     id: string;
     name: string;
 }
+
+export interface SenderRow {
+    id: number;
+    name: string | null;
+    email: string;
+    domain: string;
+    account_id: number;
+    account_email: string;
+    total: number;
+    unread: number;
+    last_received_at: string | null;
+    is_subscription: boolean;
+    category: { label_id: string; name: string } | null;
+    applying: boolean;
+    gmail_url: string;
+}
