@@ -4,6 +4,7 @@ use App\Http\Controllers\AccountLabelController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmailAccountController;
 use App\Http\Controllers\RetentionRuleController;
+use App\Http\Controllers\SenderController;
 use App\Http\Controllers\Settings\SecurityController;
 use App\Http\Controllers\SubscriptionController;
 use Illuminate\Support\Facades\Route;
@@ -28,6 +29,9 @@ Route::middleware(['auth', 'auth.session', 'active'])->group(function () {
 
     Route::get('/accounts/{account}/labels', [AccountLabelController::class, 'index'])->whereNumber('account')->name('accounts.labels.index');
     Route::post('/accounts/{account}/labels', [AccountLabelController::class, 'store'])->whereNumber('account')->middleware('throttle:30,1')->name('accounts.labels.store');
+
+    Route::get('/senders', [SenderController::class, 'index'])->name('senders.index');
+    Route::post('/senders/categorize', [SenderController::class, 'categorize'])->middleware('throttle:30,1')->name('senders.categorize');
 
     Route::get('/retention-rules', [RetentionRuleController::class, 'index'])->name('retention-rules.index');
     Route::post('/retention-rules', [RetentionRuleController::class, 'store'])->name('retention-rules.store');
