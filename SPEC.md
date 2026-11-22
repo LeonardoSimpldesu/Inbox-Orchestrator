@@ -127,12 +127,14 @@ Políticas de expiração configuradas pelo usuário.
 - `id` (PK, BigInt)
 - `email_account_id` (FK -> email_accounts.id, Cascade)
 - `name` (String - ex: "E-mails promocionais expiram em 15 dias")
-- `filter_type` (Enum: `category`, `domain`, `sender`, `query`)
-- `filter_value` (String - ex: `CATEGORY_PROMOTIONS`, `amazon.com.br`, `uber.com`)
-- `retention_days` (Integer - ex: 15, 30)
+- `filter_type` (Enum: `category`, `domain`, `sender`, `label`)
+- `filter_value` (String - `promotions`/`updates`/`social`/`forums`, domínio (inclui subdomínios), e-mail do remetente ou ID do marcador do Gmail)
+- `retention_days` (Integer - 0 a 3650; 0 = qualquer idade)
 - `action` (Enum: `archive`, `trash`, `add_label`)
-- `target_label` (String, Nullable - usado se action == `add_label`)
-- `is_active` (Boolean, Default true)
+- `target_label` (String, Nullable - ID do marcador do Gmail, usado se action == `add_label`)
+- `archive_after_label` (Boolean, Default false - na ação marcador, também arquiva)
+- `is_active` (Boolean, Default false - regra nasce pausada; as criadas pelo Hub nascem ativas)
+- `simulated_at` (Timestamp, Nullable - ativar exige simulação; editar zera e pausa)
 - `last_run_at` (Timestamp, Nullable)
 - `created_at`, `updated_at`
 
@@ -181,15 +183,15 @@ Página `/subscriptions`. Design: `docs/superpowers/specs/2026-11-19-subscriptio
 5. **E-mails existentes:** na confirmação, manter (padrão), arquivar ou mandar para a lixeira todos os e-mails do remetente no Gmail (inclusive não importados), em lotes de 1.000.
 
 ### 4.3. Motor de Expiração e Retenção (TTL Engine)
-1. **Criação de Regras:**
-   - Interface visual simples: *"E-mails da categoria [Promocional] com mais de [15] dias devem ser [Arquivados]"*.
-2. **Botão "Simular / Ver impacto" (Dry-Run):**
-   - Consulta o banco de metadados e mostra quantos e-mails seriam afetados hoje antes de aplicar a ação.
-3. **Execução:**
-   - **Automática:** Diária às 03:00 via agendador do Laravel (`$schedule->command('inbox:apply-retention')->dailyAt('03:00')`).
-   - **Manual:** Botão **"Executar regras agora"** no painel que despacha o job para a fila.
-4. **Chamada na API do Gmail:**
-   - Agrupa em chamadas em lote (`batchModify`) para remover a label `INBOX` (arquivar) ou aplicar `TRASH` (lixeira).
+Página `/retention-rules`. Design: `docs/superpowers/specs/2026-11-22-retention-rules-design.md`.
+1. **Criação de Regras:** *"E-mails de [categoria / domínio / remetente / marcador] com mais de [N] dias devem ser [arquivados / mandados para a lixeira / marcados]"*, por conta. Marcadores do Gmail podem ser escolhidos ou criados no formulário.
+2. **Proteções fixas:** nunca tocam e-mails com estrela, enviados, rascunhos ou spam.
+3. **Simular (obrigatório):** a regra nasce pausada; "Simular" mostra o total exato (até "mais de 10.000") e uma amostra dos 20 mais antigos. Só então ela pode ser ativada. Editar pausa a regra e exige nova simulação.
+4. **Busca no próprio Gmail:** simulação e execução usam a mesma consulta (`messages.list` com `q`/`labelIds`), então enxergam a caixa inteira, inclusive o que ainda não foi importado, e o número simulado é o executado.
+5. **Execução:**
+   - **Automática:** `inbox:apply-retention` roda de hora em hora e executa uma vez por dia cada regra ativa, na primeira hora depois das 03:00 (`APP_SCHEDULE_TIMEZONE`, padrão `America/Sao_Paulo`) — funciona mesmo se a máquina estava desligada às 03:00.
+   - **Manual:** botão **"Executar regras agora"**.
+6. **Chamada na API do Gmail:** `batchModify` em blocos de 1.000 (remover `INBOX`, aplicar `TRASH` ou o marcador); os metadados locais são atualizados em seguida. Cada execução e simulação fica no histórico (`rule_execution_logs`).
 
 ---
 
@@ -231,7 +233,7 @@ app/
   - ✅ Conexão OAuth 2.0 com Gmail e armazenamento criptografado de tokens: tela Contas, reconectar, desconectar (soft delete), um Gmail por usuário, aviso de expiração do modo Teste.
   - ✅ Worker de sincronização de metadados e remetentes: recentes (3 meses), histórico em fatias, novidades a cada 5 min, sem duplicação e respeitando a cota do Gmail.
   - ✅ Tela do Hub de Assinaturas com Unsubscribe e links diretos para o Gmail.
-  - Tela de Regras de Expiração (TTL) com Dry-Run, execução diária e botão manual.
+  - ✅ Tela de Regras de Expiração (TTL) com simulação obrigatória, execução diária e botão manual.
 
 * **Fase 2 (Follow-ups e Rotinas):**
   - Monitoramento de e-mails sem resposta (Inbound/Outbound).

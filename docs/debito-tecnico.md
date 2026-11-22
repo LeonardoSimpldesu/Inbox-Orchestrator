@@ -20,7 +20,7 @@ Itens conhecidos que ficaram para depois. Cada um traz o impacto, onde está e u
 | 15 | Funções de data do frontend sem testes | Qualidade | Baixa |
 | 16 | Hub de Assinaturas sem ações em massa nem busca | UX | Média |
 | 17 | Remetente "Tratado" não pode ser refeito nem desfeito pelo Hub | UX | Baixa |
-| 18 | Regras criadas pelo Hub só podem ser removidas quando existir a tela de regras | UX | Baixa (resolver na etapa de TTL) |
+| 19 | Regras sem busca livre, filtros combinados ou regras para todas as contas | Funcionalidade | Baixa |
 
 ---
 
@@ -193,13 +193,12 @@ Mesmo sem a expiração semanal, o refresh token ainda pode ser invalidado (senh
 
 **Sugestão:** na aba Tratados, botão "Tentar de novo" (abre o mesmo diálogo) e "Voltar para pendentes" (status `none`, sem apagar a regra).
 
-## 18. Regras criadas pelo Hub só podem ser removidas quando existir a tela de regras
+## 19. Regras sem busca livre, filtros combinados ou regras para todas as contas
 
-**Origem:** Hub de Assinaturas (2026-11-19).
+**Origem:** Regras de expiração (2026-11-22).
 
-**O que acontece:** "Criar regra" grava uma `retention_rules` (remetente, 0 dias). Ainda não há tela para listar, editar ou apagar regras.
+**O que acontece:** cada regra tem um único filtro (categoria, domínio, remetente ou marcador), vale para uma conta e não aceita a busca livre do Gmail (`query` do SPEC original). Para "Promoções **e** domínio X" ou a mesma regra nas duas contas, é preciso criar várias regras ou não dá.
 
-**Onde:** `retention_rules`; tela de Regras de TTL (próxima etapa da Fase 1).
+**Onde:** `RetentionRuleRequest`, `RuleQuery`, `retention_rules.filter_type`.
 
-**Sugestão:** a tela de regras de TTL deve listar também as regras com `filter_type = sender` e permitir apagá-las; ao apagar, voltar o remetente para `none` se o status for `blocked`.
-
+**Sugestão:** permitir uma lista de condições (E) e um seletor "todas as contas" que crie uma regra por conta; a busca livre só com pré-visualização obrigatória e validação de operadores perigosos.

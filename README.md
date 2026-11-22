@@ -104,6 +104,16 @@ Menu **Assinaturas**: newsletters e e-mails promocionais das suas contas, do que
 
 A desinscrição de um clique é feita pelo servidor, e o endereço vem de um cabeçalho de e-mail. Por isso o app só chama hosts `https` públicos, valida e fixa o IP antes de conectar e não segue redirecionamentos.
 
+## Regras de expiração
+
+Menu **Regras TTL**: regras como "Promoções com mais de 15 dias → arquivar", "e-mails de `nubank.com.br` → marcador Banco" ou "marcador Faturas com mais de 90 dias → lixeira".
+
+- Toda regra nasce **pausada**. Clique em **Simular** para ver quantos e-mails ela afetaria hoje e uma amostra, e só então em **Ativar**. Editar uma regra a pausa de novo.
+- A busca é feita no próprio Gmail, então alcança a caixa inteira (não só o que já foi importado).
+- Nunca são tocados: e-mails com estrela, enviados, rascunhos e spam.
+- As regras ativas rodam uma vez por dia, na primeira hora depois das 03:00 (`APP_SCHEDULE_TIMEZONE`), e pelo botão **Executar regras agora**. Rodar manualmente: `docker exec inbox_app php artisan inbox:apply-retention`.
+- Arquivados ficam em "Todos os e-mails" e a lixeira do Gmail guarda os e-mails por 30 dias: dá para desfazer pelo próprio Gmail.
+
 ## E-mail
 
 | Ambiente | Configuração |

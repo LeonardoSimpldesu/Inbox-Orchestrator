@@ -67,6 +67,11 @@ Every query starts from the authenticated user: `User::emailAccounts()`, `sender
 - Unsubscribe runs in `UnsubscribeSenderJob`: `OneClickUnsubscriber` (RFC 8058 POST, **SSRF guard**: https only, every resolved IP must be global, connection pinned with `CURLOPT_RESOLVE`, no redirects; resolver behind `HostResolver`), `MailtoUnsubscriber` (`MailtoParser` rejects CR/LF outside the body), then `SenderMailCleaner` (Gmail `from:` listing + `batchModify` in 1,000-id blocks + `MessageStore::applyLabelChange`).
 - `unsubscribe_url`/`unsubscribe_mailto` never go into Inertia props or logs; the sender page is reached through `GET /subscriptions/{id}/page` (redirect in the user's browser). Logs carry `sender_id` + error code only.
 
+### Retention rules (TTL)
+- `RuleQuery::for($rule, $targetLabelName)` turns a rule into a Gmail search (`q` + `labelIds`) and the label changes; it always adds `-is:starred -in:sent -in:drafts`. `RuleSimulator` (count capped at 10,000 + 20 oldest as sample) and `RuleExecutor` (list all → `batchModify` → `MessageStore::applyLabelChange`) share it, so the simulated count is what runs. `TargetLabel` resolves the target label name by id; a missing label pauses the rule (`label_missing`).
+- Rules start paused; `canActivate()` requires `simulated_at`, and any edit clears it. `inbox:apply-retention` runs hourly and dispatches `ExecuteRetentionRuleJob` for active rules not run since today's 03:00 in `config('app.schedule_timezone')`. Every simulation/run/failure goes to `rule_execution_logs` (error = code only).
+- Controllers look rules up with `whereIn(email_account_id, user's accounts)` (not the `hasManyThrough`, whose `laravel_through_key` must not reach saved models). Label ids in forms are validated against the account's Gmail labels.
+
 ### Frontend
 Inertia pages in `resources/js/Pages`, layouts `AppLayout` (authenticated) and `GuestLayout` (auth screens), shared inputs in `Components/`. Shared props are typed via module augmentation of `@inertiajs/core` (`InertiaConfig.sharedPageProps`) in `resources/js/types/inertia.d.ts`; domain types in `resources/js/types/index.d.ts`.
 
