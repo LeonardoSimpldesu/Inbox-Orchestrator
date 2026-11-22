@@ -15,8 +15,10 @@ use Google\Http\Batch;
 use Google\Service\Exception as GoogleServiceException;
 use Google\Service\Gmail;
 use Google\Service\Gmail\BatchModifyMessagesRequest;
+use Google\Service\Gmail\Label;
 use Google\Service\Gmail\Message;
 use GuzzleHttp\ClientInterface;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
@@ -51,6 +53,12 @@ class GmailProviderService implements EmailProviderInterface
     private const COST_BATCH_MODIFY = 50;
 
     private const LIST_ALL_PAGE_SIZE = 500;
+
+    private const COST_LABELS_LIST = 1;
+
+    private const COST_LABELS_CREATE = 5;
+
+    private const LABELS_CACHE_SECONDS = 600;
 
     private const BATCH_MODIFY_SIZE = 1000;
 
@@ -146,10 +154,10 @@ class GmailProviderService implements EmailProviderInterface
         return (string) $this->call($account, fn () => $gmail->users->getProfile('me')->getHistoryId(), self::COST_GET_PROFILE);
     }
 
-    public function listMessageIds(EmailAccount $account, string $query, ?string $pageToken = null, int $maxResults = 100): MessagePage
+    public function listMessageIds(EmailAccount $account, string $query, ?string $pageToken = null, int $maxResults = 100, array $labelIds = []): MessagePage
     {
         $gmail = $this->gmail($account);
-        $params = array_filter(['q' => $query, 'pageToken' => $pageToken, 'maxResults' => $maxResults]);
+        $params = array_filter(['q' => $query, 'pageToken' => $pageToken, 'maxResults' => $maxResults, 'labelIds' => $labelIds]);
 
         $response = $this->call($account, fn () => $gmail->users_messages->listUsersMessages('me', $params), self::COST_MESSAGES_LIST);
 
@@ -278,18 +286,64 @@ class GmailProviderService implements EmailProviderInterface
         $this->call($account, fn () => $gmail->users_messages->send('me', $message), self::COST_MESSAGES_SEND);
     }
 
-    public function listAllMessageIds(EmailAccount $account, string $query): array
+    public function listAllMessageIds(EmailAccount $account, string $query, array $labelIds = [], ?int $limit = null): array
     {
         $ids = [];
         $pageToken = null;
 
         do {
-            $page = $this->listMessageIds($account, $query, $pageToken, self::LIST_ALL_PAGE_SIZE);
+            $size = $limit === null ? self::LIST_ALL_PAGE_SIZE : min(self::LIST_ALL_PAGE_SIZE, $limit - count($ids));
+            $page = $this->listMessageIds($account, $query, $pageToken, $size, $labelIds);
             array_push($ids, ...$page->ids);
             $pageToken = $page->nextPageToken;
-        } while ($pageToken !== null);
+        } while ($pageToken !== null && ($limit === null || count($ids) < $limit));
 
         return $ids;
+    }
+
+    public function listLabels(EmailAccount $account): array
+    {
+        return Cache::remember($this->labelsCacheKey($account), self::LABELS_CACHE_SECONDS, function () use ($account) {
+            $gmail = $this->gmail($account);
+            $response = $this->call($account, fn () => $gmail->users_labels->listUsersLabels('me'), self::COST_LABELS_LIST);
+
+            return collect($response->getLabels() ?? [])
+                ->filter(fn (Label $label) => $label->getType() === 'user')
+                ->map(fn (Label $label) => ['id' => $label->getId(), 'name' => $label->getName()])
+                ->sortBy(fn (array $label) => Str::lower(Str::ascii($label['name'])))
+                ->values()
+                ->all();
+        });
+    }
+
+    public function createLabel(EmailAccount $account, string $name): array
+    {
+        $name = trim($name);
+        $gmail = $this->gmail($account);
+        $label = new Label(['name' => $name, 'labelListVisibility' => 'labelShow', 'messageListVisibility' => 'show']);
+
+        try {
+            $created = $this->call($account, fn () => $gmail->users_labels->create('me', $label), self::COST_LABELS_CREATE);
+        } catch (ProviderUnavailable $e) {
+            if ($e->getMessage() !== 'http_409') {
+                throw $e;
+            }
+
+            // Gmail answers 409 when the name already exists: reuse that label.
+            Cache::forget($this->labelsCacheKey($account));
+            $existing = collect($this->listLabels($account))->first(fn (array $l) => Str::lower($l['name']) === Str::lower($name));
+
+            return $existing ?? throw $e;
+        }
+
+        Cache::forget($this->labelsCacheKey($account));
+
+        return ['id' => $created->getId(), 'name' => $created->getName()];
+    }
+
+    private function labelsCacheKey(EmailAccount $account): string
+    {
+        return 'gmail-labels:'.$account->id;
     }
 
     public function batchModify(EmailAccount $account, array $ids, array $addLabels, array $removeLabels): void

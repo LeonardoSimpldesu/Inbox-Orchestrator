@@ -648,4 +648,83 @@ class GmailProviderServiceTest extends TestCase
 
         Sleep::assertSleptTimes(1);
     }
+
+    public function test_list_all_message_ids_sends_label_ids_and_stops_at_limit(): void
+    {
+        $ids = $this->service([
+            $this->jsonResponse(['messages' => [['id' => 'a'], ['id' => 'b'], ['id' => 'c']], 'nextPageToken' => 'p2']),
+            $this->jsonResponse(['messages' => [['id' => 'd']], 'nextPageToken' => 'p3']),
+        ])->listAllMessageIds($this->connectedAccount(), 'older_than:15d', ['CATEGORY_PROMOTIONS'], 4);
+
+        $this->assertSame(['a', 'b', 'c', 'd'], $ids);
+        $this->assertCount(2, $this->history);
+        $first = (string) $this->history[0]['request']->getUri();
+        $this->assertStringContainsString('labelIds=CATEGORY_PROMOTIONS', $first);
+        $this->assertSame('4', $this->queryOf($first)['maxResults']);
+        $this->assertSame('1', $this->queryOf((string) $this->history[1]['request']->getUri())['maxResults']);
+    }
+
+    public function test_list_labels_returns_user_labels_sorted_and_cached(): void
+    {
+        $account = $this->connectedAccount();
+        $service = $this->service([$this->jsonResponse(['labels' => [
+            ['id' => 'Label_2', 'name' => 'Zeta', 'type' => 'user'],
+            ['id' => 'INBOX', 'name' => 'INBOX', 'type' => 'system'],
+            ['id' => 'Label_1', 'name' => 'Álbum/Notas', 'type' => 'user'],
+        ]])]);
+
+        $expected = [['id' => 'Label_1', 'name' => 'Álbum/Notas'], ['id' => 'Label_2', 'name' => 'Zeta']];
+        $this->assertSame($expected, $service->listLabels($account));
+        $this->assertSame($expected, $service->listLabels($account));
+        $this->assertCount(1, $this->history);
+    }
+
+    public function test_create_label_posts_name_and_clears_cache(): void
+    {
+        $account = $this->connectedAccount();
+        $service = $this->service([
+            $this->jsonResponse(['labels' => []]),
+            $this->jsonResponse(['id' => 'Label_9', 'name' => 'Banco', 'type' => 'user']),
+            $this->jsonResponse(['labels' => [['id' => 'Label_9', 'name' => 'Banco', 'type' => 'user']]]),
+        ]);
+        $service->listLabels($account);
+
+        $this->assertSame(['id' => 'Label_9', 'name' => 'Banco'], $service->createLabel($account, '  Banco '));
+        $body = json_decode((string) $this->history[1]['request']->getBody(), true);
+        $this->assertSame('Banco', $body['name']);
+        $this->assertSame('labelShow', $body['labelListVisibility']);
+        $this->assertSame([['id' => 'Label_9', 'name' => 'Banco']], $service->listLabels($account));
+        $this->assertCount(3, $this->history);
+    }
+
+    public function test_create_label_returns_existing_on_conflict(): void
+    {
+        $label = $this->service([
+            $this->jsonResponse(['error' => ['code' => 409, 'message' => 'Label name exists or conflicts']], 409),
+            $this->jsonResponse(['labels' => [['id' => 'Label_3', 'name' => 'Banco', 'type' => 'user']]]),
+        ])->createLabel($this->connectedAccount(), 'banco');
+
+        $this->assertSame(['id' => 'Label_3', 'name' => 'Banco'], $label);
+    }
+
+    public function test_create_label_other_errors_propagate(): void
+    {
+        $this->expectException(ProviderUnavailable::class);
+        $this->expectExceptionMessage('http_400');
+
+        $this->service([$this->jsonResponse(['error' => ['code' => 400, 'message' => 'Invalid label name']], 400)])
+            ->createLabel($this->connectedAccount(), 'INBOX');
+    }
+
+    public function test_conflict_without_matching_label_propagates(): void
+    {
+        $this->expectException(ProviderUnavailable::class);
+        $this->expectExceptionMessage('http_409');
+
+        $this->service([
+            $this->jsonResponse(['error' => ['code' => 409, 'message' => 'conflict']], 409),
+            $this->jsonResponse(['labels' => []]),
+        ])->createLabel($this->connectedAccount(), 'Banco');
+    }
 }
+

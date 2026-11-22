@@ -48,7 +48,10 @@ interface EmailProviderInterface
      * @throws ReauthorizationRequired
      * @throws ProviderUnavailable
      */
-    public function listMessageIds(EmailAccount $account, string $query, ?string $pageToken = null, int $maxResults = 100): MessagePage;
+    /**
+     * @param  list<string>  $labelIds  messages must carry all of them
+     */
+    public function listMessageIds(EmailAccount $account, string $query, ?string $pageToken = null, int $maxResults = 100, array $labelIds = []): MessagePage;
 
     /**
      * Messages that no longer exist are omitted.
@@ -77,14 +80,35 @@ interface EmailProviderInterface
     public function sendMessage(EmailAccount $account, string $to, string $subject, string $body): void;
 
     /**
-     * Every message id matching the query (all pages).
+     * Every message id matching the query (all pages, or up to $limit).
      *
+     * @param  list<string>  $labelIds
      * @return list<string>
      *
      * @throws ReauthorizationRequired
      * @throws ProviderUnavailable
      */
-    public function listAllMessageIds(EmailAccount $account, string $query): array;
+    public function listAllMessageIds(EmailAccount $account, string $query, array $labelIds = [], ?int $limit = null): array;
+
+    /**
+     * The user's own labels, sorted by name.
+     *
+     * @return list<array{id: string, name: string}>
+     *
+     * @throws ReauthorizationRequired
+     * @throws ProviderUnavailable
+     */
+    public function listLabels(EmailAccount $account): array;
+
+    /**
+     * Creates a label, or returns the existing one with the same name.
+     *
+     * @return array{id: string, name: string}
+     *
+     * @throws ReauthorizationRequired
+     * @throws ProviderUnavailable
+     */
+    public function createLabel(EmailAccount $account, string $name): array;
 
     /**
      * @param  list<string>  $ids

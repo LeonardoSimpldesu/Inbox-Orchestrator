@@ -47,6 +47,9 @@ class FakeEmailProvider implements EmailProviderInterface
     /** @var list<array{account_id: int, to: string, subject: string, body: string}> */
     public array $sent = [];
 
+    /** @var list<array{id: string, name: string}> */
+    public array $labels = [];
+
     /** @var list<array{account_id: int, ids: list<string>, add: list<string>, remove: list<string>}> */
     public array $modified = [];
 
@@ -81,12 +84,12 @@ class FakeEmailProvider implements EmailProviderInterface
         return $this->historyId;
     }
 
-    public function listMessageIds(EmailAccount $account, string $query, ?string $pageToken = null, int $maxResults = 100): MessagePage
+    public function listMessageIds(EmailAccount $account, string $query, ?string $pageToken = null, int $maxResults = 100, array $labelIds = []): MessagePage
     {
         $this->hit('listMessageIds');
         $this->listCalls[] = ['query' => $query, 'pageToken' => $pageToken];
 
-        $matching = $this->matching($query);
+        $matching = $this->matching($query, $labelIds);
         usort($matching, fn (MessageMetadata $a, MessageMetadata $b) => $b->internalDate <=> $a->internalDate ?: strcmp($b->id, $a->id));
 
         $offset = (int) ($pageToken ?? 0);
@@ -121,12 +124,32 @@ class FakeEmailProvider implements EmailProviderInterface
         $this->sent[] = ['account_id' => $account->id, 'to' => $to, 'subject' => $subject, 'body' => $body];
     }
 
-    public function listAllMessageIds(EmailAccount $account, string $query): array
+    public function listAllMessageIds(EmailAccount $account, string $query, array $labelIds = [], ?int $limit = null): array
     {
         $this->hit('listAllMessageIds');
-        $this->listCalls[] = ['query' => $query, 'pageToken' => null];
+        $this->listCalls[] = ['query' => $query, 'pageToken' => null, 'labelIds' => $labelIds];
 
-        return array_values(array_map(fn (MessageMetadata $m) => $m->id, $this->matching($query)));
+        $matching = $this->matching($query, $labelIds);
+        usort($matching, fn (MessageMetadata $a, MessageMetadata $b) => $b->internalDate <=> $a->internalDate ?: strcmp($b->id, $a->id));
+        $ids = array_map(fn (MessageMetadata $m) => $m->id, $matching);
+
+        return $limit === null ? $ids : array_slice($ids, 0, $limit);
+    }
+
+    public function listLabels(EmailAccount $account): array
+    {
+        $this->hit('listLabels');
+
+        return $this->labels;
+    }
+
+    public function createLabel(EmailAccount $account, string $name): array
+    {
+        $this->hit('createLabel');
+        $label = ['id' => 'Label_'.(count($this->labels) + 1), 'name' => trim($name)];
+        $this->labels[] = $label;
+
+        return $label;
     }
 
     public function batchModify(EmailAccount $account, array $ids, array $addLabels, array $removeLabels): void
@@ -143,13 +166,20 @@ class FakeEmailProvider implements EmailProviderInterface
      *
      * @return array<string, MessageMetadata>
      */
-    private function matching(string $query): array
+    private function matching(string $query, array $labelIds = []): array
     {
         preg_match('/after:(\\d+)/', $query, $after);
         preg_match('/before:(\\d+)/', $query, $before);
         preg_match('/from:(\\S+)/', $query, $from);
 
-        return array_filter($this->mailbox, fn (MessageMetadata $m) => (! $after || $m->internalDate->timestamp >= (int) $after[1])
+        preg_match('/older_than:(\\d+)d/', $query, $olderThan);
+        $inInbox = str_contains($query, 'in:inbox');
+
+        return array_filter($this->mailbox, fn (MessageMetadata $m) => array_diff($labelIds, $m->labelIds) === []
+            && (! $olderThan || $m->internalDate->lessThan(now()->subDays((int) $olderThan[1])))
+            && (! $inInbox || in_array('INBOX', $m->labelIds, true))
+            && (! str_contains($query, '-is:starred') || ! in_array('STARRED', $m->labelIds, true))
+            && (! $after || $m->internalDate->timestamp >= (int) $after[1])
             && (! $before || $m->internalDate->timestamp < (int) $before[1])
             && (! $from || str_contains(strtolower((string) $m->from), strtolower($from[1]))));
     }
