@@ -12,7 +12,7 @@ interface RetentionRuleFormProps {
 }
 
 interface RuleFormData {
-    email_account_id: number;
+    email_account_id: number | 'all';
     name: string;
     filter_type: RuleFilterType;
     filter_value: string;
@@ -55,7 +55,8 @@ export default function RetentionRuleForm({ accounts, rule, onClose }: Retention
     const [labelsError, setLabelsError] = useState<string | null>(null);
     const [nameTouched, setNameTouched] = useState(rule !== null);
     const [newLabel, setNewLabel] = useState('');
-    const needsLabels = form.data.filter_type === 'label' || form.data.action === 'add_label';
+    const allAccounts = form.data.email_account_id === 'all';
+    const needsLabels = !allAccounts && (form.data.filter_type === 'label' || form.data.action === 'add_label');
 
     useEffect(() => {
         if (!needsLabels || !form.data.email_account_id) {
@@ -136,14 +137,18 @@ export default function RetentionRuleForm({ accounts, rule, onClose }: Retention
                             setLabels([]);
                             form.setData((data) => ({
                                 ...data,
-                                email_account_id: Number(e.target.value),
-                                filter_value: data.filter_type === 'label' ? '' : data.filter_value,
+                                email_account_id: e.target.value === 'all' ? 'all' : Number(e.target.value),
+                                filter_type: e.target.value === 'all' && data.filter_type === 'label' ? 'category' : data.filter_type,
+                                filter_value: data.filter_type === 'label' ? (e.target.value === 'all' ? 'promotions' : '') : data.filter_value,
+                                action: e.target.value === 'all' && data.action === 'add_label' ? 'archive' : data.action,
                                 target_label: '',
                             }));
                         }}
                     >
                         {accounts.map((account) => <option key={account.id} value={account.id}>{account.account_email}</option>)}
+                        {!rule && accounts.length > 1 && <option value="all">Todas as contas (uma cópia por conta)</option>}
                     </select>
+                    {allAccounts && <p className="mt-1 text-xs text-slate-500">Cria uma regra pausada em cada conta. Marcadores não estão disponíveis porque são de cada conta.</p>}
                     {error('email_account_id')}
                 </div>
 
@@ -159,7 +164,9 @@ export default function RetentionRuleForm({ accounts, rule, onClose }: Retention
                                 form.setData((data) => ({ ...data, filter_type: type, filter_value: type === 'category' ? 'promotions' : '' }));
                             }}
                         >
-                            {(Object.keys(FILTER_TYPE_LABELS) as RuleFilterType[]).map((type) => <option key={type} value={type}>{FILTER_TYPE_LABELS[type]}</option>)}
+                            {(Object.keys(FILTER_TYPE_LABELS) as RuleFilterType[])
+                                .filter((type) => !allAccounts || type !== 'label')
+                                .map((type) => <option key={type} value={type}>{FILTER_TYPE_LABELS[type]}</option>)}
                         </select>
                     </div>
                     <div className="sm:col-span-2">
@@ -186,7 +193,9 @@ export default function RetentionRuleForm({ accounts, rule, onClose }: Retention
                     <div className="sm:col-span-2">
                         <label className={labelClass} htmlFor="rule-action">Ação</label>
                         <select id="rule-action" className={input} value={form.data.action} onChange={(e) => form.setData('action', e.target.value as RuleAction)}>
-                            {(Object.keys(ACTION_LABELS) as RuleAction[]).map((action) => <option key={action} value={action}>{ACTION_LABELS[action]}</option>)}
+                            {(Object.keys(ACTION_LABELS) as RuleAction[])
+                                .filter((action) => !allAccounts || action !== 'add_label')
+                                .map((action) => <option key={action} value={action}>{ACTION_LABELS[action]}</option>)}
                         </select>
                         {form.data.action === 'add_label' && (
                             <div className="mt-2 space-y-2">
@@ -217,7 +226,7 @@ export default function RetentionRuleForm({ accounts, rule, onClose }: Retention
 
                 <div className="flex justify-end gap-2">
                     <button type="button" onClick={onClose} className="px-4 py-2.5 text-sm font-semibold text-slate-300 hover:text-white cursor-pointer">Cancelar</button>
-                    <PrimaryButton type="submit" className="w-auto" disabled={form.processing}>{rule ? 'Salvar' : 'Salvar e simular'}</PrimaryButton>
+                    <PrimaryButton type="submit" className="w-auto" disabled={form.processing}>{rule ? 'Salvar' : allAccounts ? 'Criar nas contas' : 'Salvar e simular'}</PrimaryButton>
                 </div>
             </form>
         </div>

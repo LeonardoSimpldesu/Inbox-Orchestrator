@@ -213,4 +213,39 @@ class RetentionRuleCrudTest extends RetentionRulesTestCase
 
         $this->assertModelExists($foreign);
     }
+
+    public function test_rule_for_all_accounts_creates_one_paused_copy_per_connected_account(): void
+    {
+        $second = EmailAccount::factory()->for($this->user)->create();
+        EmailAccount::factory()->for($this->user)->disconnected()->create();
+        EmailAccount::factory()->create();
+
+        $this->actingAs($this->user)->from('/retention-rules')
+            ->post('/retention-rules', $this->payload(['email_account_id' => 'all', 'simulate' => true]))
+            ->assertRedirect('/retention-rules')
+            ->assertSessionHas('success', 'Regra criada em 2 contas. Simule cada uma antes de ativar.')
+            ->assertSessionMissing('simulation');
+
+        $rules = RetentionRule::orderBy('email_account_id')->get();
+        $this->assertSame([$this->account->id, $second->id], $rules->pluck('email_account_id')->all());
+        $this->assertTrue($rules->every(fn (RetentionRule $rule) => ! $rule->is_active && $rule->simulated_at === null && $rule->name === 'Promoções em 15 dias'));
+    }
+
+    public function test_rule_for_all_accounts_cannot_use_labels(): void
+    {
+        $this->actingAs($this->user)->post('/retention-rules', $this->payload(['email_account_id' => 'all', 'filter_type' => 'label', 'filter_value' => 'Label_1']))
+            ->assertSessionHasErrors(['email_account_id' => 'Marcadores são de cada conta: escolha uma conta para usar marcadores.']);
+        $this->actingAs($this->user)->post('/retention-rules', $this->payload(['email_account_id' => 'all', 'action' => 'add_label', 'target_label' => 'Label_1']))
+            ->assertSessionHasErrors('email_account_id');
+
+        $this->assertSame(0, RetentionRule::count());
+    }
+
+    public function test_editing_cannot_switch_to_all_accounts(): void
+    {
+        $rule = $this->rule();
+
+        $this->actingAs($this->user)->put("/retention-rules/{$rule->id}", $this->payload(['email_account_id' => 'all']))
+            ->assertSessionHasErrors('email_account_id');
+    }
 }

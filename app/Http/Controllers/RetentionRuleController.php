@@ -74,6 +74,22 @@ class RetentionRuleController extends Controller
 
     public function store(RetentionRuleRequest $request, RuleSimulator $simulator): RedirectResponse
     {
+        if ($request->forAllAccounts()) {
+            $accountIds = $request->user()->emailAccounts()->pluck('email_accounts.id');
+            $now = now();
+
+            RetentionRule::insert($accountIds->map(fn (int $accountId) => [
+                ...$request->ruleAttributes(),
+                'email_account_id' => $accountId,
+                'is_active' => false,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ])->all());
+
+            // Each copy is simulated on its own row: the count differs per account.
+            return back()->with('success', "Regra criada em {$accountIds->count()} contas. Simule cada uma antes de ativar.");
+        }
+
         $rule = RetentionRule::create($request->ruleAttributes());
 
         if ($request->boolean('simulate')) {

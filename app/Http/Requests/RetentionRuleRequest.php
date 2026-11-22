@@ -37,8 +37,14 @@ class RetentionRuleRequest extends FormRequest
         };
 
         return [
-            'email_account_id' => ['required', 'integer', Rule::exists('email_accounts', 'id')
-                ->where('user_id', $this->user()->id)->whereNull('deleted_at')],
+            'email_account_id' => $this->forAllAccounts()
+                ? ['required', function (string $attribute, mixed $value, \Closure $fail) {
+                    if ($this->input('filter_type') === 'label' || $this->input('action') === 'add_label') {
+                        $fail('Marcadores são de cada conta: escolha uma conta para usar marcadores.');
+                    }
+                }]
+                : ['required', 'integer', Rule::exists('email_accounts', 'id')
+                    ->where('user_id', $this->user()->id)->whereNull('deleted_at')],
             'name' => ['required', 'string', 'max:100'],
             'filter_type' => ['required', Rule::in(RetentionRule::FILTER_TYPES)],
             'filter_value' => ['required', 'string', ...$filterValue],
@@ -47,6 +53,14 @@ class RetentionRuleRequest extends FormRequest
             'target_label' => [Rule::requiredIf($this->input('action') === 'add_label'), 'nullable', 'string', 'max:255'],
             'archive_after_label' => ['boolean'],
         ];
+    }
+
+    /**
+     * "All accounts" is only offered when creating: it makes one copy per account.
+     */
+    public function forAllAccounts(): bool
+    {
+        return $this->input('email_account_id') === 'all' && $this->isMethod('post');
     }
 
     /**
