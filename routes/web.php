@@ -32,6 +32,7 @@ Route::middleware(['auth', 'auth.session', 'active'])->group(function () {
 
     Route::get('/senders', [SenderController::class, 'index'])->name('senders.index');
     Route::post('/senders/categorize', [SenderController::class, 'categorize'])->middleware('throttle:30,1')->name('senders.categorize');
+    Route::post('/senders/clean', [SenderController::class, 'clean'])->middleware('throttle:30,1')->name('senders.clean');
 
     Route::get('/retention-rules', [RetentionRuleController::class, 'index'])->name('retention-rules.index');
     Route::post('/retention-rules', [RetentionRuleController::class, 'store'])->name('retention-rules.store');

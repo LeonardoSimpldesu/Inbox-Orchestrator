@@ -6,14 +6,18 @@ use App\Contracts\EmailProviderInterface;
 use App\Exceptions\ProviderUnavailable;
 use App\Exceptions\ReauthorizationRequired;
 use App\Jobs\ApplySenderLabelJob;
+use App\Jobs\CleanSenderMailJob;
 use App\Models\EmailAccount;
 use App\Models\EmailSender;
+use App\Models\RetentionRule;
 use App\Services\Senders\SenderCategories;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -137,6 +141,36 @@ class SenderController extends Controller
             : "Categoria aplicada a {$senders->count()} remetente(s).");
     }
 
+    public function clean(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'ids' => ['required', 'array', 'min:1', 'max:100'],
+            'ids.*' => ['integer'],
+            'cleanup' => ['required', Rule::in(['archive', 'trash'])],
+            'future' => ['boolean'],
+        ]);
+
+        $senders = $request->user()->senders()->with('account')
+            ->whereIn('email_senders.id', $validated['ids'])
+            ->get()
+            ->reject(fn (EmailSender $sender) => $sender->account->needsReauth());
+
+        if ($senders->isEmpty()) {
+            return back()->with('error', 'Nenhum remetente selecionado pode ser limpo agora.');
+        }
+
+        $senders->each(fn (EmailSender $sender) => CleanSenderMailJob::dispatch($sender->id, $sender->email_account_id, $validated['cleanup']));
+
+        $message = "Limpeza iniciada para {$senders->count()} remetente(s).";
+
+        if ($request->boolean('future')) {
+            $this->createFutureRules($senders, $validated['cleanup']);
+            $message .= ' Regra criada para os próximos e-mails.';
+        }
+
+        return back()->with('success', $message);
+    }
+
     /**
      * Correlated "the sender has a category rule (with this label)" condition.
      */
@@ -148,6 +182,42 @@ class SenderController extends Controller
             ->where('retention_rules.filter_type', 'sender')
             ->where('retention_rules.action', 'add_label')
             ->when($labelId !== null, fn (QueryBuilder $q) => $q->where('retention_rules.target_label', $labelId));
+    }
+
+    /**
+     * Active "sender → archive/trash, 0 days" rules, skipping senders that already have one.
+     *
+     * @param  Collection<int, EmailSender>  $senders
+     */
+    private function createFutureRules(Collection $senders, string $action): void
+    {
+        $existing = RetentionRule::where('filter_type', 'sender')
+            ->where('action', $action)
+            ->whereIn('email_account_id', $senders->pluck('email_account_id')->unique()->values())
+            ->whereIn('filter_value', $senders->pluck('email')->unique()->values())
+            ->get(['email_account_id', 'filter_value'])
+            ->map(fn (RetentionRule $rule) => $rule->email_account_id.'|'.$rule->filter_value);
+
+        $now = now();
+        $rows = $senders
+            ->reject(fn (EmailSender $sender) => $existing->contains($sender->email_account_id.'|'.$sender->email))
+            ->map(fn (EmailSender $sender) => [
+                'email_account_id' => $sender->email_account_id,
+                'name' => Str::limit(($action === 'trash' ? 'Mandar para a lixeira e-mails de ' : 'Arquivar e-mails de ').($sender->name ?? $sender->email), 100, ''),
+                'filter_type' => 'sender',
+                'filter_value' => $sender->email,
+                'retention_days' => 0,
+                'action' => $action,
+                'archive_after_label' => false,
+                'is_active' => true,
+                'simulated_at' => $now,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+
+        if ($rows->isNotEmpty()) {
+            RetentionRule::insert($rows->values()->all());
+        }
     }
 
     /**
