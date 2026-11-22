@@ -2,12 +2,15 @@
 
 namespace Tests\Feature\Console;
 
+use App\Contracts\EmailProviderInterface;
 use App\Models\EmailAccount;
 use App\Models\EmailMessageMeta;
 use App\Models\EmailSender;
 use App\Models\RetentionRule;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Tests\Fakes\FakeEmailProvider;
 use Tests\TestCase;
 
 class UserLifecycleCommandsTest extends TestCase
@@ -127,5 +130,24 @@ class UserLifecycleCommandsTest extends TestCase
         $this->artisan('user:delete', ['email' => 'user@example.com', '--force' => true])->assertExitCode(0);
 
         $this->assertModelMissing($user);
+    }
+
+    public function test_delete_revokes_gmail_access_of_connected_accounts(): void
+    {
+        $provider = new FakeEmailProvider;
+        $provider->revokeResult = false;
+        $this->app->instance(EmailProviderInterface::class, $provider);
+        Log::spy();
+        $user = User::factory()->create(['email' => 'user@example.com']);
+        $connected = EmailAccount::factory()->for($user)->create();
+        $second = EmailAccount::factory()->for($user)->create();
+        EmailAccount::factory()->for($user)->disconnected()->create();
+        EmailAccount::factory()->create();
+
+        $this->artisan('user:delete', ['email' => 'user@example.com', '--force' => true])->assertExitCode(0);
+
+        $this->assertEqualsCanonicalizing([$connected->id, $second->id], $provider->revoked);
+        $this->assertModelMissing($user);
+        Log::shouldHaveReceived('warning')->twice();
     }
 }

@@ -81,4 +81,16 @@ class DisabledUserTest extends TestCase
 
         Notification::assertNotSentTo($user, ResetPassword::class);
     }
+
+    public function test_disabled_user_with_a_leftover_session_cannot_use_two_factor_endpoints(): void
+    {
+        $user = User::factory()->create(['disabled_at' => now()]);
+
+        $this->actingAs($user)->withSession(['auth.password_confirmed_at' => time()])
+            ->postJson('/user/two-factor-authentication')
+            ->assertRedirect('/login');
+
+        $this->assertGuest();
+        $this->assertNull($user->fresh()->two_factor_secret);
+    }
 }

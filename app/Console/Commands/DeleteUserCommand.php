@@ -3,8 +3,10 @@
 namespace App\Console\Commands;
 
 use App\Console\Commands\Concerns\FindsUserByEmail;
+use App\Contracts\EmailProviderInterface;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class DeleteUserCommand extends Command
@@ -15,7 +17,7 @@ class DeleteUserCommand extends Command
 
     protected $description = 'Remove um usuário e todos os dados dele (contas de e-mail, remetentes, regras)';
 
-    public function handle(): int
+    public function handle(EmailProviderInterface $provider): int
     {
         $user = $this->findUserOrReport();
 
@@ -31,6 +33,12 @@ class DeleteUserCommand extends Command
                 $this->error('Confirmação incorreta. Nada foi apagado.');
 
                 return self::FAILURE;
+            }
+        }
+
+        foreach ($user->emailAccounts as $account) {
+            if (! $provider->revoke($account)) {
+                Log::warning('Gmail token revocation failed on user deletion.', ['account_id' => $account->id]);
             }
         }
 

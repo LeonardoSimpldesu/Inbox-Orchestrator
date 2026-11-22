@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
@@ -92,6 +93,18 @@ class FortifyServiceProvider extends ServiceProvider
 
         RateLimiter::for('two-factor', function (Request $request) {
             return Limit::perMinute(5)->by($request->session()->get('login.id'));
+        });
+
+        // Hitting the limit returns the usual generic answer, so it reveals nothing.
+        RateLimiter::for('password-reset', fn (Request $request) => Limit::perMinute(5)
+            ->by($request->ip())
+            ->response(fn (Request $request) => (new PasswordResetLinkRequestedResponse)->toResponse($request)));
+
+        // Fortify registers its routes itself; the reset-link route has no limiter option.
+        $this->app->booted(function () {
+            $routes = Route::getRoutes();
+            $routes->refreshNameLookups();
+            $routes->getByName('password.email')?->middleware('throttle:password-reset');
         });
     }
 }

@@ -233,4 +233,20 @@ class PasswordResetTest extends TestCase
         $this->get('/')->assertRedirect('/login');
         $this->assertGuest();
     }
+
+    public function test_reset_link_requests_are_limited_per_ip_with_the_same_answer(): void
+    {
+        $users = User::factory()->count(6)->create();
+
+        foreach ($users as $user) {
+            $this->from('/forgot-password')
+                ->post('/forgot-password', ['email' => $user->email])
+                ->assertRedirect('/forgot-password')
+                ->assertSessionHas('status', self::GENERIC_STATUS)
+                ->assertSessionHasNoErrors();
+        }
+
+        Notification::assertSentTimes(ResetPassword::class, 5);
+        Notification::assertNotSentTo($users->last(), ResetPassword::class);
+    }
 }
