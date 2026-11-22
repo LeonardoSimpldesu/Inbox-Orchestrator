@@ -9,6 +9,7 @@ use App\Models\RetentionRule;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -23,9 +24,11 @@ class SubscriptionController extends Controller
         $accounts = $user->emailAccounts()->orderBy('account_email')->get(['id', 'account_email']);
         $accountId = $accounts->firstWhere('id', $request->integer('account'))?->id;
         $status = $request->query('status') === 'handled' ? 'handled' : 'pending';
+        $search = mb_substr(trim((string) $request->query('q', '')), 0, 100);
 
         $scoped = fn () => $user->senders()
-            ->when($accountId, fn (Builder $query) => $query->where('email_accounts.id', $accountId));
+            ->when($accountId, fn (Builder $query) => $query->where('email_accounts.id', $accountId))
+            ->when($search !== '', fn (Builder $query) => $this->search($query, $search));
 
         $subscriptions = $scoped()
             ->{$status === 'handled' ? 'handledSubscriptions' : 'pendingSubscriptions'}()
@@ -59,7 +62,7 @@ class SubscriptionController extends Controller
         return Inertia::render('Subscriptions/Index', [
             'subscriptions' => $subscriptions,
             'accounts' => $accounts,
-            'filters' => ['account' => $accountId, 'status' => $status],
+            'filters' => ['account' => $accountId, 'status' => $status, 'q' => $search],
             'counts' => [
                 'pending' => $scoped()->pendingSubscriptions()->count(),
                 'handled' => $scoped()->handledSubscriptions()->count(),
@@ -101,6 +104,68 @@ class SubscriptionController extends Controller
     }
 
     /**
+     * Bulk unsubscribe only uses automatic methods (one-click or mailto); senders
+     * that need their page visited or a rule chosen are left to be handled one by one.
+     */
+    public function bulkUnsubscribe(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'ids' => ['required', 'array', 'min:1', 'max:100'],
+            'ids.*' => ['integer'],
+            'cleanup' => ['required', Rule::in(['keep', 'archive', 'trash'])],
+        ]);
+
+        $selected = $request->user()->senders()
+            ->with('account')
+            ->whereIn('email_senders.id', $validated['ids'])
+            ->get()
+            ->reject(fn (EmailSender $sender) => $sender->unsubscribe_status === EmailSender::STATUS_PROCESSING);
+
+        $methods = $selected
+            ->reject(fn (EmailSender $sender) => $sender->account->needsReauth())
+            ->mapWithKeys(fn (EmailSender $sender) => [$sender->id => match (true) {
+                $sender->unsubscribeOptions()['one_click'] => 'one_click',
+                $sender->unsubscribeOptions()['mailto'] => 'mailto',
+                default => null,
+            }])
+            ->filter();
+
+        if ($methods->isEmpty()) {
+            return back()->with('error', 'Nenhum dos remetentes selecionados aceita desinscrição automática. Trate-os um a um.');
+        }
+
+        EmailSender::whereIn('id', $methods->keys())->update(['unsubscribe_status' => EmailSender::STATUS_PROCESSING, 'unsubscribe_error' => null]);
+        $methods->each(fn (string $method, int $id) => UnsubscribeSenderJob::dispatch($id, $method, $validated['cleanup']));
+
+        $skipped = $selected->count() - $methods->count();
+        $message = "Desinscrição iniciada para {$methods->count()} remetente(s).".($skipped > 0 ? " {$skipped} precisam ser tratados um a um." : '');
+
+        return back()->with('success', $message);
+    }
+
+    /**
+     * Back to the Hub's pending list; a rule created for the sender is kept
+     * (it is managed on the rules page).
+     */
+    public function reset(Request $request, string $sender): RedirectResponse
+    {
+        $subscription = $request->user()->senders()->findOrFail($sender);
+
+        if ($subscription->unsubscribe_status === EmailSender::STATUS_PROCESSING) {
+            return back()->with('error', 'Aguarde a desinscrição em andamento terminar.');
+        }
+
+        EmailSender::whereKey($subscription->id)->update([
+            'unsubscribe_status' => EmailSender::STATUS_NONE,
+            'unsubscribe_method' => null,
+            'unsubscribe_requested_at' => null,
+            'unsubscribe_error' => null,
+        ]);
+
+        return back()->with('success', 'Remetente voltou para Pendentes.');
+    }
+
+    /**
      * The sender's unsubscribe page is opened by the user's browser, never fetched
      * by the server, and its URL is kept out of Inertia props.
      */
@@ -111,6 +176,16 @@ class SubscriptionController extends Controller
         abort_if($url === null, 404);
 
         return redirect()->away($url);
+    }
+
+    private function search(Builder $query, string $search): void
+    {
+        $term = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], mb_strtolower($search)).'%';
+
+        $query->where(fn (Builder $q) => $q
+            ->whereRaw("lower(email_senders.name) like ? escape '\\'", [$term])
+            ->orWhereRaw("lower(email_senders.email) like ? escape '\\'", [$term])
+            ->orWhereRaw("lower(email_senders.domain) like ? escape '\\'", [$term]));
     }
 
     private function startUnsubscribe(EmailSender $sender): string

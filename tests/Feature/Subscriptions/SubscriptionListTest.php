@@ -36,7 +36,7 @@ class SubscriptionListTest extends SubscriptionTestCase
                 ->where('subscriptions.data.0.options', ['one_click' => true, 'mailto' => true, 'page' => true])
                 ->has('accounts', 1)
                 ->where('accounts.0.account_email', 'me@gmail.com')
-                ->where('filters', ['account' => null, 'status' => 'pending'])
+                ->where('filters', ['account' => null, 'status' => 'pending', 'q' => ''])
             );
     }
 
@@ -161,5 +161,26 @@ class SubscriptionListTest extends SubscriptionTestCase
         };
 
         $this->assertSame($count(1), $count(150));
+    }
+
+    public function test_search_matches_name_email_or_domain(): void
+    {
+        $this->subscription(['name' => 'Loja Azul', 'email' => 'promo@azul.com', 'domain' => 'azul.com']);
+        $this->subscription(['name' => 'Jornal', 'email' => 'news@jornal.com.br', 'domain' => 'jornal.com.br']);
+        $this->subscription(['name' => 'Outro', 'email' => 'oi@verde.com', 'domain' => 'verde.com']);
+
+        $names = fn (string $query) => collect($this->actingAs($this->user)->get('/subscriptions?q='.urlencode($query))
+            ->viewData('page')['props']['subscriptions']['data'])->pluck('name')->sort()->values()->all();
+
+        $this->assertSame(['Loja Azul'], $names('azul'));
+        $this->assertSame(['Jornal'], $names('NEWS@'));
+        $this->assertSame(['Jornal'], $names('com.br'));
+        $this->assertSame([], $names('%'));
+        $this->assertSame(['Jornal', 'Loja Azul', 'Outro'], $names('  '));
+
+        $this->actingAs($this->user)->get('/subscriptions?q=azul')->assertInertia(fn (Assert $page) => $page
+            ->where('filters.q', 'azul')
+            ->where('counts.pending', 1)
+        );
     }
 }

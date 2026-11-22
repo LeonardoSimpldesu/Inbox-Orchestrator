@@ -9,7 +9,7 @@ import { formatDate, timeAgo } from '@/lib/gmail';
 interface SubscriptionsIndexProps {
     subscriptions: Paginated<SubscriptionRow>;
     accounts: { id: number; account_email: string }[];
-    filters: { account: number | null; status: 'pending' | 'handled' };
+    filters: { account: number | null; status: 'pending' | 'handled'; q: string };
     counts: { pending: number; handled: number };
 }
 
@@ -62,6 +62,28 @@ function paginationLabel(label: string): string {
 
 export default function SubscriptionsIndex({ subscriptions, accounts, filters, counts }: SubscriptionsIndexProps) {
     const [selected, setSelected] = useState<SubscriptionRow | null>(null);
+    const [checked, setChecked] = useState<number[]>([]);
+    const [bulkCleanup, setBulkCleanup] = useState<'keep' | 'archive' | 'trash'>('keep');
+    const [search, setSearch] = useState(filters.q);
+    const selectable = filters.status === 'pending' ? subscriptions.data.filter((row) => row.status !== 'processing') : [];
+    const allChecked = selectable.length > 0 && selectable.every((row) => checked.includes(row.id));
+
+    useEffect(() => setChecked([]), [subscriptions.current_page, filters.status, filters.account, filters.q]);
+
+    useEffect(() => {
+        if (search === filters.q) return;
+        const timer = setTimeout(() => applyFilters({ q: search }), 400);
+        return () => clearTimeout(timer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [search]);
+
+    const toggle = (id: number) => setChecked((current) => (current.includes(id) ? current.filter((value) => value !== id) : [...current, id]));
+    const bulkUnsubscribe = () => {
+        const warning = bulkCleanup === 'trash' ? ' e mandar os e-mails deles para a lixeira' : bulkCleanup === 'archive' ? ' e arquivar os e-mails deles' : '';
+        if (window.confirm(`Desinscrever ${checked.length} remetente(s)${warning}? Os que só têm página de desinscrição ou regra serão pulados.`)) {
+            router.post('/subscriptions/bulk-unsubscribe', { ids: checked, cleanup: bulkCleanup }, { preserveScroll: true, onSuccess: () => setChecked([]) });
+        }
+    };
     const processing = subscriptions.data.some((row) => row.status === 'processing');
     const { start, stop } = usePoll(5_000, { only: ['subscriptions', 'counts'] }, { autoStart: false });
 
@@ -77,7 +99,7 @@ export default function SubscriptionsIndex({ subscriptions, accounts, filters, c
 
     const applyFilters = (next: Partial<SubscriptionsIndexProps['filters']>) => {
         const merged = { ...filters, ...next };
-        router.get('/subscriptions', { account: merged.account ?? undefined, status: merged.status }, { preserveState: true, preserveScroll: true });
+        router.get('/subscriptions', { account: merged.account ?? undefined, status: merged.status, q: merged.q || undefined }, { preserveState: true, preserveScroll: true });
     };
 
     const tab = (status: 'pending' | 'handled', label: string, count: number) => (
@@ -112,23 +134,63 @@ export default function SubscriptionsIndex({ subscriptions, accounts, filters, c
                             <option key={account.id} value={account.id}>{account.account_email}</option>
                         ))}
                     </select>
+                    <input
+                        type="search"
+                        value={search}
+                        onChange={(event) => setSearch(event.target.value)}
+                        placeholder="Buscar nome, e-mail ou domínio"
+                        aria-label="Buscar remetente"
+                        maxLength={100}
+                        className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-200 w-56"
+                    />
                     {tab('pending', 'Pendentes', counts.pending)}
                     {tab('handled', 'Tratados', counts.handled)}
                 </div>
             </div>
+
+            {checked.length > 0 && (
+                <div className="mt-6 flex flex-wrap items-center gap-3 rounded-xl border border-indigo-500/40 bg-indigo-950/40 p-3 text-sm text-indigo-100">
+                    <span>{checked.length} selecionado(s)</span>
+                    <select
+                        value={bulkCleanup}
+                        onChange={(event) => setBulkCleanup(event.target.value as 'keep' | 'archive' | 'trash')}
+                        aria-label="E-mails existentes"
+                        className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-200"
+                    >
+                        <option value="keep">Manter os e-mails existentes</option>
+                        <option value="archive">Arquivar os e-mails existentes</option>
+                        <option value="trash">Mandar os e-mails existentes para a lixeira</option>
+                    </select>
+                    <button type="button" onClick={bulkUnsubscribe} className="rounded-lg bg-rose-600/90 hover:bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white cursor-pointer">
+                        Desinscrever selecionados
+                    </button>
+                    <button type="button" onClick={() => setChecked([])} className="text-xs text-indigo-200 underline underline-offset-2 cursor-pointer">Limpar seleção</button>
+                </div>
+            )}
 
             <div className="mt-6 bg-slate-900/40 border border-slate-800 rounded-2xl overflow-x-auto">
                 {subscriptions.data.length === 0 ? (
                     <div className="text-center py-12 px-4">
                         <MailX className="w-10 h-10 text-slate-600 mx-auto mb-3" />
                         <p className="text-sm text-slate-300">
-                            {filters.status === 'pending' ? 'Nenhuma assinatura pendente.' : 'Nenhuma assinatura tratada ainda.'}
+                            {filters.q ? 'Nenhuma assinatura encontrada para essa busca.' : filters.status === 'pending' ? 'Nenhuma assinatura pendente.' : 'Nenhuma assinatura tratada ainda.'}
                         </p>
                     </div>
                 ) : (
                     <table className="w-full min-w-[680px] text-sm">
                         <thead>
                             <tr className="text-left text-xs uppercase tracking-wider text-slate-500 border-b border-slate-800 whitespace-nowrap">
+                                {filters.status === 'pending' && (
+                                    <th className="pl-4 py-3 w-8">
+                                        <input
+                                            type="checkbox"
+                                            aria-label="Selecionar todos da página"
+                                            className="h-4 w-4 accent-indigo-500"
+                                            checked={allChecked}
+                                            onChange={() => setChecked(allChecked ? [] : selectable.map((row) => row.id))}
+                                        />
+                                    </th>
+                                )}
                                 <th className="px-4 py-3 font-medium">Remetente</th>
                                 <th className="px-4 py-3 font-medium text-right">E-mails</th>
                                 <th className="px-4 py-3 font-medium text-right">Não lidos</th>
@@ -139,6 +201,18 @@ export default function SubscriptionsIndex({ subscriptions, accounts, filters, c
                         <tbody className="divide-y divide-slate-800">
                             {subscriptions.data.map((row) => (
                                 <tr key={row.id} className="align-top">
+                                    {filters.status === 'pending' && (
+                                        <td className="pl-4 py-3">
+                                            <input
+                                                type="checkbox"
+                                                aria-label={`Selecionar ${row.email}`}
+                                                className="h-4 w-4 accent-indigo-500"
+                                                disabled={row.status === 'processing'}
+                                                checked={checked.includes(row.id)}
+                                                onChange={() => toggle(row.id)}
+                                            />
+                                        </td>
+                                    )}
                                     <td className="px-4 py-3 max-w-[22rem]">
                                         <div className="truncate font-medium text-slate-200">{row.name ?? row.email}</div>
                                         <div className="truncate text-xs text-slate-500">{row.email}</div>
@@ -170,6 +244,25 @@ export default function SubscriptionsIndex({ subscriptions, accounts, filters, c
                                                 >
                                                     {availableMethods(row)[0] === 'rule' ? 'Criar regra' : 'Desinscrever'}
                                                 </button>
+                                            )}
+                                            {filters.status === 'handled' && (
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setSelected(row)}
+                                                        className="inline-flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold px-3 py-2 rounded-lg border border-slate-700 transition cursor-pointer whitespace-nowrap"
+                                                    >
+                                                        Tentar de novo
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => router.post(`/subscriptions/${row.id}/reset`, {}, { preserveScroll: true })}
+                                                        title={row.status === 'blocked' ? 'A regra criada continua ativa na tela de Regras.' : undefined}
+                                                        className="inline-flex items-center gap-1.5 text-slate-300 hover:text-white text-xs font-semibold px-3 py-2 rounded-lg border border-slate-700 transition cursor-pointer whitespace-nowrap"
+                                                    >
+                                                        Voltar para pendentes
+                                                    </button>
+                                                </>
                                             )}
                                         </div>
                                     </td>

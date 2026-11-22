@@ -6,6 +6,7 @@ use App\Jobs\UnsubscribeSenderJob;
 use App\Models\EmailAccount;
 use App\Models\EmailSender;
 use App\Models\RetentionRule;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 
 class SubscriptionActionsTest extends SubscriptionTestCase
@@ -167,5 +168,129 @@ class SubscriptionActionsTest extends SubscriptionTestCase
 
         $this->post("/subscriptions/{$sender->id}/unsubscribe")->assertRedirect('/login');
         $this->get("/subscriptions/{$sender->id}/page")->assertRedirect('/login');
+    }
+
+    public function test_handled_sender_can_be_tried_again(): void
+    {
+        $sender = $this->subscription(['unsubscribe_status' => 'requested', 'unsubscribe_method' => 'page', 'unsubscribe_requested_at' => now()->subWeek()]);
+
+        $this->unsubscribe($sender, ['method' => 'one_click', 'cleanup' => 'keep'])->assertSessionHas('success', 'Desinscrição iniciada.');
+
+        $this->assertSame('processing', $sender->fresh()->unsubscribe_status);
+        Queue::assertPushed(UnsubscribeSenderJob::class, 1);
+    }
+
+    public function test_handled_sender_can_go_back_to_pending(): void
+    {
+        $sender = $this->subscription([
+            'unsubscribe_status' => 'blocked', 'unsubscribe_method' => 'rule',
+            'unsubscribe_requested_at' => now(), 'unsubscribe_error' => 'cleanup_rate_limited',
+        ]);
+        $rule = RetentionRule::create(['email_account_id' => $this->account->id, 'name' => 'R', 'filter_type' => 'sender', 'filter_value' => $sender->email, 'retention_days' => 0, 'action' => 'archive', 'is_active' => true]);
+
+        $this->actingAs($this->user)->from('/subscriptions?status=handled')->post("/subscriptions/{$sender->id}/reset")
+            ->assertRedirect('/subscriptions?status=handled')
+            ->assertSessionHas('success', 'Remetente voltou para Pendentes.');
+
+        $sender->refresh();
+        $this->assertSame(['none', null, null, null], [$sender->unsubscribe_status, $sender->unsubscribe_method, $sender->unsubscribe_requested_at, $sender->unsubscribe_error]);
+        $this->assertModelExists($rule);
+    }
+
+    public function test_processing_sender_cannot_go_back_to_pending(): void
+    {
+        $sender = $this->subscription(['unsubscribe_status' => 'processing']);
+
+        $this->actingAs($this->user)->post("/subscriptions/{$sender->id}/reset")
+            ->assertSessionHas('error', 'Aguarde a desinscrição em andamento terminar.');
+
+        $this->assertSame('processing', $sender->fresh()->unsubscribe_status);
+    }
+
+    public function test_reset_is_scoped_to_the_user(): void
+    {
+        $foreign = $this->subscription(['unsubscribe_status' => 'requested'], EmailAccount::factory()->create());
+
+        $this->actingAs($this->user)->post("/subscriptions/{$foreign->id}/reset")->assertNotFound();
+        $this->assertSame('requested', $foreign->fresh()->unsubscribe_status);
+    }
+
+    public function test_guests_cannot_reset(): void
+    {
+        $sender = $this->subscription(['unsubscribe_status' => 'requested']);
+
+        $this->post("/subscriptions/{$sender->id}/reset")->assertRedirect('/login');
+    }
+
+    private function bulk(array $data)
+    {
+        return $this->actingAs($this->user)->from('/subscriptions')->post('/subscriptions/bulk-unsubscribe', $data);
+    }
+
+    public function test_bulk_unsubscribe_queues_automatic_methods_only(): void
+    {
+        $oneClick = $this->subscription();
+        $mailto = $this->subscription(['unsubscribe_url' => null, 'unsubscribe_one_click' => false]);
+        $pageOnly = $this->subscription(['unsubscribe_one_click' => false, 'unsubscribe_mailto' => null]);
+        $ruleOnly = $this->subscription(['unsubscribe_url' => null, 'unsubscribe_one_click' => false, 'unsubscribe_mailto' => null, 'total_messages_promotional' => 2]);
+        $busy = $this->subscription(['unsubscribe_status' => 'processing']);
+        $foreign = $this->subscription([], EmailAccount::factory()->create());
+
+        $this->bulk(['ids' => [$oneClick->id, $mailto->id, $pageOnly->id, $ruleOnly->id, $busy->id, $foreign->id], 'cleanup' => 'archive'])
+            ->assertRedirect('/subscriptions')
+            ->assertSessionHas('success', 'Desinscrição iniciada para 2 remetente(s). 2 precisam ser tratados um a um.');
+
+        Queue::assertPushed(UnsubscribeSenderJob::class, 2);
+        Queue::assertPushed(UnsubscribeSenderJob::class, fn (UnsubscribeSenderJob $job) => $job->senderId === $oneClick->id && $job->method === 'one_click' && $job->cleanup === 'archive');
+        Queue::assertPushed(UnsubscribeSenderJob::class, fn (UnsubscribeSenderJob $job) => $job->senderId === $mailto->id && $job->method === 'mailto');
+        $this->assertSame(['processing', 'processing', 'none', 'none'], [$oneClick->fresh()->unsubscribe_status, $mailto->fresh()->unsubscribe_status, $pageOnly->fresh()->unsubscribe_status, $ruleOnly->fresh()->unsubscribe_status]);
+        $this->assertSame('none', $foreign->fresh()->unsubscribe_status);
+    }
+
+    public function test_bulk_unsubscribe_skips_accounts_needing_reconnection(): void
+    {
+        $other = EmailAccount::factory()->for($this->user)->needsReauth()->create();
+        $ok = $this->subscription();
+        $blocked = $this->subscription([], $other);
+
+        $this->bulk(['ids' => [$ok->id, $blocked->id], 'cleanup' => 'keep'])
+            ->assertSessionHas('success', 'Desinscrição iniciada para 1 remetente(s). 1 precisam ser tratados um a um.');
+
+        Queue::assertPushed(UnsubscribeSenderJob::class, 1);
+    }
+
+    public function test_bulk_unsubscribe_with_nothing_to_do(): void
+    {
+        $pageOnly = $this->subscription(['unsubscribe_one_click' => false, 'unsubscribe_mailto' => null]);
+
+        $this->bulk(['ids' => [$pageOnly->id], 'cleanup' => 'keep'])
+            ->assertSessionHas('error', 'Nenhum dos remetentes selecionados aceita desinscrição automática. Trate-os um a um.');
+
+        Queue::assertNothingPushed();
+    }
+
+    public function test_bulk_unsubscribe_validation(): void
+    {
+        $this->bulk(['ids' => [], 'cleanup' => 'keep'])->assertSessionHasErrors('ids');
+        $this->bulk(['ids' => range(1, 101), 'cleanup' => 'keep'])->assertSessionHasErrors('ids');
+        $this->bulk(['ids' => ['x'], 'cleanup' => 'keep'])->assertSessionHasErrors('ids.0');
+        $this->bulk(['ids' => [1], 'cleanup' => 'burn'])->assertSessionHasErrors('cleanup');
+        Queue::assertNothingPushed();
+    }
+
+    public function test_bulk_unsubscribe_uses_constant_queries(): void
+    {
+        $count = function (int $senders): int {
+            $ids = array_map(fn () => $this->subscription()->id, range(1, $senders));
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            $this->bulk(['ids' => $ids, 'cleanup' => 'keep']);
+            $queries = count(DB::getQueryLog());
+            DB::disableQueryLog();
+
+            return $queries;
+        };
+
+        $this->assertSame($count(1), $count(40));
     }
 }

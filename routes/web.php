@@ -21,6 +21,9 @@ Route::middleware(['auth', 'auth.session', 'active'])->group(function () {
     Route::get('/subscriptions', [SubscriptionController::class, 'index'])->name('subscriptions.index');
     Route::post('/subscriptions/{sender}/unsubscribe', [SubscriptionController::class, 'unsubscribe'])
         ->whereNumber('sender')->middleware('throttle:30,1')->name('subscriptions.unsubscribe');
+    Route::post('/subscriptions/bulk-unsubscribe', [SubscriptionController::class, 'bulkUnsubscribe'])
+        ->middleware('throttle:30,1')->name('subscriptions.bulk-unsubscribe');
+    Route::post('/subscriptions/{sender}/reset', [SubscriptionController::class, 'reset'])->whereNumber('sender')->name('subscriptions.reset');
     Route::get('/subscriptions/{sender}/page', [SubscriptionController::class, 'page'])->whereNumber('sender')->name('subscriptions.page');
 
     Route::get('/accounts/{account}/labels', [AccountLabelController::class, 'index'])->whereNumber('account')->name('accounts.labels.index');
