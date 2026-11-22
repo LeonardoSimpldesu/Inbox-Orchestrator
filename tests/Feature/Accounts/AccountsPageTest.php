@@ -4,6 +4,7 @@ namespace Tests\Feature\Accounts;
 
 use App\Models\EmailAccount;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Inertia\Testing\AssertableInertia as Assert;
 
 class AccountsPageTest extends AccountsTestCase
@@ -45,5 +46,21 @@ class AccountsPageTest extends AccountsTestCase
         $response->assertDontSee($account->access_token, escape: false);
         $response->assertDontSee($account->refresh_token, escape: false);
         $response->assertDontSee('history-secret', escape: false);
+    }
+
+    public function test_lists_own_disconnected_accounts_with_purge_date(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-11-23 12:00:00'));
+        $user = User::factory()->create();
+        EmailAccount::factory()->for($user)->create(['account_email' => 'active@gmail.com']);
+        EmailAccount::factory()->for($user)->create(['account_email' => 'old@gmail.com', 'deleted_at' => '2026-11-01 10:00:00']);
+        EmailAccount::factory()->create(['account_email' => 'other@gmail.com', 'deleted_at' => now()]);
+
+        $this->actingAs($user)->get('/accounts')->assertInertia(fn (Assert $page) => $page
+            ->has('disconnected', 1)
+            ->where('disconnected.0.account_email', 'old@gmail.com')
+            ->where('disconnected.0.purge_at', '2027-01-30')
+            ->has('disconnected.0', fn (Assert $row) => $row->hasAll(['id', 'account_email', 'purge_at']))
+        );
     }
 }

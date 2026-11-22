@@ -6,11 +6,12 @@ import AppLayout from '@/Layouts/AppLayout';
 import AccountStatusBadge from '@/Components/AccountStatusBadge';
 import AccountSyncProgress from '@/Components/AccountSyncProgress';
 import PrimaryButton from '@/Components/PrimaryButton';
-import { connectGmail, importHistory } from '@/lib/gmail';
+import { connectGmail, formatDate, importHistory } from '@/lib/gmail';
 
 interface AccountsIndexProps {
     accounts: EmailAccountSummary[];
     testingMode: boolean;
+    disconnected: { id: number; account_email: string; purge_at: string | null }[];
 }
 
 function disconnect(account: EmailAccountSummary): void {
@@ -23,7 +24,7 @@ function disconnect(account: EmailAccountSummary): void {
     }
 }
 
-export default function AccountsIndex({ accounts, testingMode }: AccountsIndexProps) {
+export default function AccountsIndex({ accounts, testingMode, disconnected }: AccountsIndexProps) {
     const importing = accounts.some((account) => account.sync.state === 'importing_recent' || account.sync.manual_import);
     const { start, stop } = usePoll(15_000, { only: ['accounts'] }, { autoStart: false });
 
@@ -118,6 +119,30 @@ export default function AccountsIndex({ accounts, testingMode }: AccountsIndexPr
                     </ul>
                 )}
             </div>
+            {disconnected.length > 0 && (
+                <section className="mt-8" aria-labelledby="disconnected-title">
+                    <h2 id="disconnected-title" className="text-sm font-semibold text-slate-300">Contas desconectadas</h2>
+                    <p className="text-xs text-slate-500 mt-1">Os dados guardados são apagados de vez na data indicada. Reconectar a conta antes disso traz tudo de volta.</p>
+                    <ul className="mt-3 divide-y divide-slate-800 rounded-2xl border border-slate-800 bg-slate-900/40">
+                        {disconnected.map((account) => (
+                            <li key={account.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                    <div className="text-sm text-slate-300 truncate">{account.account_email}</div>
+                                    {account.purge_at && <div className="text-xs text-amber-300">Será apagada em {formatDate(account.purge_at)}</div>}
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => connectGmail(account.id)}
+                                    className="inline-flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold px-3 py-2 rounded-lg border border-slate-700 transition cursor-pointer"
+                                >
+                                    <RefreshCw className="w-3.5 h-3.5" />
+                                    Reconectar
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                </section>
+            )}
         </AppLayout>
     );
 }

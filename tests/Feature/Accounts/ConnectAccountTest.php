@@ -57,6 +57,16 @@ class ConnectAccountTest extends AccountsTestCase
         $this->assertSame('mine@gmail.com', $this->provider->lastAuthorization['loginHint']);
     }
 
+    public function test_redirect_uses_login_hint_for_own_disconnected_account(): void
+    {
+        $user = User::factory()->create();
+        $account = EmailAccount::factory()->for($user)->disconnected()->create(['account_email' => 'back@gmail.com']);
+
+        $this->actingAs($user)->post('/accounts/google/redirect', ['account' => $account->id]);
+
+        $this->assertSame('back@gmail.com', $this->provider->lastAuthorization['loginHint']);
+    }
+
     public function test_redirect_ignores_other_users_account_hint(): void
     {
         $other = EmailAccount::factory()->create(['account_email' => 'other@gmail.com']);

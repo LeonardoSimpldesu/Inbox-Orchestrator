@@ -89,6 +89,14 @@ class EmailAccount extends Model
         return $this->hasMany(RetentionRule::class);
     }
 
+    /**
+     * Date a disconnected account and its data are deleted for good.
+     */
+    public function purgeAt(): ?Carbon
+    {
+        return $this->deleted_at?->copy()->addDays((int) config('app.disconnected_account_retention_days'));
+    }
+
     public function reconnectBy(): ?Carbon
     {
         if (! config('services.google.testing') || $this->authorized_at === null) {

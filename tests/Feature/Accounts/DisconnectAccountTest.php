@@ -15,7 +15,7 @@ class DisconnectAccountTest extends AccountsTestCase
 
         $this->actingAs($user)->delete("/accounts/{$account->id}")
             ->assertRedirect('/accounts')
-            ->assertSessionHas('success', 'Conta bye@gmail.com desconectada. Os dados ficam guardados se você reconectar.');
+            ->assertSessionHas('success', 'Conta bye@gmail.com desconectada. Os dados ficam guardados por 90 dias caso você reconecte.');
 
         $this->assertSame([$account->id], $this->provider->revoked);
         $this->assertSoftDeleted($account);

@@ -70,6 +70,9 @@ return [
     // Time zone of the user-facing schedule (retention rules run after 03:00 here).
     'schedule_timezone' => env('APP_SCHEDULE_TIMEZONE', 'America/Sao_Paulo'),
 
+    // Disconnected Gmail accounts (and their synced data) are deleted after this many days.
+    'disconnected_account_retention_days' => (int) env('DISCONNECTED_ACCOUNT_RETENTION_DAYS', 90),
+
     /*
     |--------------------------------------------------------------------------
     | Application Locale Configuration

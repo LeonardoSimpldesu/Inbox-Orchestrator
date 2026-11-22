@@ -31,6 +31,12 @@ class EmailAccountController extends Controller
         return Inertia::render('Accounts/Index', [
             'accounts' => $request->user()->emailAccounts()->orderBy('account_email')->get()->map->summary(),
             'testingMode' => (bool) config('services.google.testing'),
+            'disconnected' => $request->user()->emailAccounts()->onlyTrashed()->orderBy('account_email')->get()
+                ->map(fn (EmailAccount $account) => [
+                    'id' => $account->id,
+                    'account_email' => $account->account_email,
+                    'purge_at' => $account->purgeAt()?->toDateString(),
+                ]),
         ]);
     }
 
@@ -39,7 +45,7 @@ class EmailAccountController extends Controller
         $state = Str::random(40);
         $request->session()->put(self::STATE_KEY, $state);
 
-        $loginHint = $request->user()->emailAccounts()->find($request->integer('account'))?->account_email;
+        $loginHint = $request->user()->emailAccounts()->withTrashed()->find($request->integer('account'))?->account_email;
 
         return Inertia::location($this->provider->authorizationUrl($state, $loginHint));
     }
@@ -107,7 +113,9 @@ class EmailAccountController extends Controller
 
         $emailAccount->delete();
 
-        return $this->back(success: "Conta {$emailAccount->account_email} desconectada. Os dados ficam guardados se você reconectar.");
+        $days = (int) config('app.disconnected_account_retention_days');
+
+        return $this->back(success: "Conta {$emailAccount->account_email} desconectada. Os dados ficam guardados por {$days} dias caso você reconecte.");
     }
 
     public function importHistory(Request $request, string $account): RedirectResponse
