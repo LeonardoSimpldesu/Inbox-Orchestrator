@@ -194,5 +194,7 @@ class UnsubscribeSenderJobTest extends TestCase
         $this->assertInstanceOf(WithoutOverlapping::class, $lock);
         $this->assertSame('unsubscribe-sender-42', $lock->key);
         $this->assertNull($lock->releaseAfter);
+        $this->assertSame(1600, $lock->expiresAfter);
+        $this->assertSame(1500, $job->timeout);
     }
 }

@@ -68,6 +68,18 @@ class RuleExecutorTest extends RetentionTestCase
         $this->assertSame(['failed', 'label_missing'], [$log->status, $log->error_message]);
     }
 
+    public function test_deleted_filter_label_pauses_rule(): void
+    {
+        $this->provider->labels = [['id' => 'Label_1', 'name' => 'Lojas']];
+        $rule = $this->rule(['filter_type' => 'label', 'filter_value' => 'Label_gone']);
+
+        $this->assertSame(0, $this->executor()->execute($rule));
+
+        $this->assertFalse($rule->fresh()->is_active);
+        $this->assertSame([], $this->provider->listCalls);
+        $this->assertSame(['failed', 'label_missing'], [RuleExecutionLog::sole()->status, RuleExecutionLog::sole()->error_message]);
+    }
+
     public function test_execution_uses_constant_queries(): void
     {
         $count = function (int $messages, string $prefix): int {

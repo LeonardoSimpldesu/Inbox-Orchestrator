@@ -68,6 +68,7 @@ class RuleQueryTest extends TestCase
             'Banco',
         );
 
+        $this->assertSame('-is:starred -in:sent -in:drafts from:a@b.com {-label:"Banco" in:inbox}', $query->query);
         $this->assertSame(['Label_7'], $query->add);
         $this->assertSame(['INBOX'], $query->remove);
     }

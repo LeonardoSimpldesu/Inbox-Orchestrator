@@ -62,7 +62,10 @@ final readonly class RuleQuery
                 throw new LabelMissing('label_missing');
             }
 
-            $terms[] = '-label:"'.str_replace('"', '', $targetLabelName).'"';
+            $withoutLabel = '-label:"'.str_replace('"', '', $targetLabelName).'"';
+
+            // With "also archive", labeled mail still in the inbox must match too ({a b} = OR).
+            $terms[] = $rule->archive_after_label ? '{'.$withoutLabel.' in:inbox}' : $withoutLabel;
         }
 
         return new self(implode(' ', $terms), $labelIds, $add, $remove);

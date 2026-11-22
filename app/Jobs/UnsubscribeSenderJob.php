@@ -22,6 +22,9 @@ class UnsubscribeSenderJob implements ShouldQueue
 
     public int $tries = 1;
 
+    /** Must stay below the queue's retry_after (DB_QUEUE_RETRY_AFTER). */
+    public int $timeout = 1500;
+
     public function __construct(
         public readonly int $senderId,
         public readonly string $method,
@@ -33,7 +36,7 @@ class UnsubscribeSenderJob implements ShouldQueue
      */
     public function middleware(): array
     {
-        return [(new WithoutOverlapping("unsubscribe-sender-{$this->senderId}"))->dontRelease()];
+        return [(new WithoutOverlapping("unsubscribe-sender-{$this->senderId}"))->expireAfter(1600)->dontRelease()];
     }
 
     public function handle(OneClickUnsubscriber $oneClick, MailtoUnsubscriber $mailto, SenderMailCleaner $cleaner): void

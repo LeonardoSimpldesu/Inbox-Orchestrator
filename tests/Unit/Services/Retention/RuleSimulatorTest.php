@@ -66,4 +66,11 @@ class RuleSimulatorTest extends RetentionTestCase
         $this->expectException(LabelMissing::class);
         $this->simulator()->simulate($this->rule(['action' => 'add_label', 'target_label' => 'Label_404']));
     }
+
+    public function test_simulation_with_deleted_filter_label_throws(): void
+    {
+        $this->expectException(LabelMissing::class);
+
+        $this->simulator()->simulate($this->rule(['filter_type' => 'label', 'filter_value' => 'Label_gone']));
+    }
 }

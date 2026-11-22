@@ -82,6 +82,23 @@ class ApplyRetentionRulesCommandTest extends TestCase
         $this->assertSame([$ok->id], $this->dispatched());
     }
 
+    public function test_rule_failing_three_times_today_waits_for_tomorrow(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-11-22 13:00:00', 'UTC'));
+        $failing = $this->rule(['last_run_at' => '2026-11-21 06:10:00']);
+        $flaky = $this->rule(['last_run_at' => '2026-11-21 06:10:00']);
+        foreach (['2026-11-22 07:00:00', '2026-11-22 08:00:00', '2026-11-22 09:00:00'] as $time) {
+            $failing->executionLogs()->create(['status' => 'failed', 'error_message' => 'http_400', 'executed_at' => $time]);
+        }
+        $failing->executionLogs()->create(['status' => 'failed', 'error_message' => 'http_400', 'executed_at' => '2026-11-21 23:00:00']);
+        $flaky->executionLogs()->create(['status' => 'failed', 'error_message' => 'rate_limited', 'executed_at' => '2026-11-22 07:00:00']);
+        $flaky->executionLogs()->create(['status' => 'simulated', 'executed_at' => '2026-11-22 07:30:00']);
+
+        $this->artisan('inbox:apply-retention');
+
+        $this->assertSame([$flaky->id], $this->dispatched());
+    }
+
     public function test_command_uses_constant_queries(): void
     {
         $this->travelTo(CarbonImmutable::parse('2026-11-22 13:00:00', 'UTC'));

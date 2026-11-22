@@ -14,7 +14,6 @@ class RetentionRule extends Model
 
     public const FILTER_TYPES = ['category', 'domain', 'sender', 'label'];
 
-    /** Rule category keys mapped to Gmail's system label ids. */
     public const CATEGORIES = [
         'promotions' => 'CATEGORY_PROMOTIONS',
         'updates' => 'CATEGORY_UPDATES',

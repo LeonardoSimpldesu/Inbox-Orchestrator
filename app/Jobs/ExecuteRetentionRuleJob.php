@@ -17,6 +17,9 @@ class ExecuteRetentionRuleJob implements ShouldQueue
 
     public int $tries = 1;
 
+    /** Must stay below the queue's retry_after (DB_QUEUE_RETRY_AFTER). */
+    public int $timeout = 1500;
+
     public function __construct(public readonly int $ruleId) {}
 
     /**
@@ -24,7 +27,7 @@ class ExecuteRetentionRuleJob implements ShouldQueue
      */
     public function middleware(): array
     {
-        return [(new WithoutOverlapping("retention-rule-{$this->ruleId}"))->dontRelease()];
+        return [(new WithoutOverlapping("retention-rule-{$this->ruleId}"))->expireAfter(1600)->dontRelease()];
     }
 
     public function handle(RuleExecutor $executor): void

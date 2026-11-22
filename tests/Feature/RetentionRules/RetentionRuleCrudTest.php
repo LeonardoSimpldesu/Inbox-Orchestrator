@@ -174,6 +174,31 @@ class RetentionRuleCrudTest extends RetentionRulesTestCase
         $this->assertSame('requested', $other->fresh()->unsubscribe_status);
     }
 
+    public function test_delete_keeps_sender_blocked_while_another_rule_targets_it(): void
+    {
+        $sender = EmailSender::create(['email_account_id' => $this->account->id, 'email' => 'promo@loja.com', 'domain' => 'loja.com', 'unsubscribe_status' => 'blocked', 'unsubscribe_method' => 'rule']);
+        $hubRule = $this->rule(['filter_type' => 'sender', 'filter_value' => 'promo@loja.com', 'retention_days' => 0, 'is_active' => true]);
+        $duplicate = $this->rule(['filter_type' => 'sender', 'filter_value' => 'promo@loja.com', 'retention_days' => 30]);
+
+        $this->actingAs($this->user)->delete("/retention-rules/{$duplicate->id}");
+        $this->assertSame('blocked', $sender->fresh()->unsubscribe_status);
+
+        $this->actingAs($this->user)->delete("/retention-rules/{$hubRule->id}");
+        $this->assertSame('none', $sender->fresh()->unsubscribe_status);
+    }
+
+    public function test_editing_a_sender_rule_away_from_the_sender_releases_it(): void
+    {
+        $sender = EmailSender::create(['email_account_id' => $this->account->id, 'email' => 'news@x.com', 'domain' => 'x.com', 'unsubscribe_status' => 'blocked', 'unsubscribe_method' => 'rule']);
+        $rule = $this->rule(['filter_type' => 'sender', 'filter_value' => 'news@x.com', 'retention_days' => 0, 'is_active' => true]);
+
+        $this->actingAs($this->user)->put("/retention-rules/{$rule->id}", $this->payload(['filter_type' => 'sender', 'filter_value' => 'news@x.com', 'retention_days' => 7]));
+        $this->assertSame('blocked', $sender->fresh()->unsubscribe_status);
+
+        $this->actingAs($this->user)->put("/retention-rules/{$rule->id}", $this->payload(['filter_type' => 'domain', 'filter_value' => 'x.com']));
+        $this->assertSame('none', $sender->fresh()->unsubscribe_status);
+    }
+
     public function test_foreign_rules_are_404(): void
     {
         $foreign = $this->rule([], EmailAccount::factory()->create());

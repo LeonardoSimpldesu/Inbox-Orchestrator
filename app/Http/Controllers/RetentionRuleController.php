@@ -85,11 +85,18 @@ class RetentionRuleController extends Controller
 
     public function update(RetentionRuleRequest $request, string $rule): RedirectResponse
     {
-        $this->findRule($request, $rule)->forceFill([
+        $retentionRule = $this->findRule($request, $rule);
+        $previous = $retentionRule->only(['email_account_id', 'filter_type', 'filter_value']);
+
+        $retentionRule->forceFill([
             ...$request->ruleAttributes(),
             'is_active' => false,
             'simulated_at' => null,
         ])->save();
+
+        if ($previous['filter_type'] === 'sender' && $retentionRule->only(array_keys($previous)) !== $previous) {
+            $this->releaseHubSender($previous['email_account_id'], $previous['filter_value']);
+        }
 
         return back()->with('success', 'Regra atualizada. Simule de novo antes de ativar.');
     }
@@ -97,16 +104,11 @@ class RetentionRuleController extends Controller
     public function destroy(Request $request, string $rule): RedirectResponse
     {
         $retentionRule = $this->findRule($request, $rule);
-
-        // Deleting a Hub rule ("block this sender") puts the sender back in the Hub's pending list.
-        if ($retentionRule->filter_type === 'sender') {
-            EmailSender::where('email_account_id', $retentionRule->email_account_id)
-                ->where('email', $retentionRule->filter_value)
-                ->where('unsubscribe_status', EmailSender::STATUS_BLOCKED)
-                ->update(['unsubscribe_status' => EmailSender::STATUS_NONE, 'unsubscribe_method' => null]);
-        }
-
         $retentionRule->delete();
+
+        if ($retentionRule->filter_type === 'sender') {
+            $this->releaseHubSender($retentionRule->email_account_id, $retentionRule->filter_value);
+        }
 
         return back()->with('success', 'Regra apagada.');
     }
@@ -151,6 +153,25 @@ class RetentionRuleController extends Controller
         $rules->each(fn (RetentionRule $rule) => ExecuteRetentionRuleJob::dispatch($rule->id));
 
         return back()->with('success', 'Execução das regras iniciada.');
+    }
+
+    /**
+     * A sender blocked from the Hub goes back to its pending list once no rule
+     * on that account targets it anymore.
+     */
+    private function releaseHubSender(int $accountId, string $email): void
+    {
+        $stillTargeted = RetentionRule::where('email_account_id', $accountId)
+            ->where('filter_type', 'sender')
+            ->where('filter_value', $email)
+            ->exists();
+
+        if (! $stillTargeted) {
+            EmailSender::where('email_account_id', $accountId)
+                ->where('email', $email)
+                ->where('unsubscribe_status', EmailSender::STATUS_BLOCKED)
+                ->update(['unsubscribe_status' => EmailSender::STATUS_NONE, 'unsubscribe_method' => null]);
+        }
     }
 
     private function findRule(Request $request, string $id): RetentionRule

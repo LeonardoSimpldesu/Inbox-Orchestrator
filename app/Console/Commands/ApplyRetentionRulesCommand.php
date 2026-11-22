@@ -16,6 +16,9 @@ class ApplyRetentionRulesCommand extends Command
 
     private const DAILY_HOUR = 3;
 
+    /** Failed runs allowed per day before the rule waits for tomorrow's window. */
+    private const DAILY_ATTEMPTS = 3;
+
     /**
      * Runs hourly: rules execute once a day, in the first run after 03:00 (user
      * time zone), so a machine that was asleep at 03:00 still runs them that day.
@@ -34,6 +37,9 @@ class ApplyRetentionRulesCommand extends Command
         $rules = RetentionRule::active()
             ->whereHas('account', fn (Builder $account) => $account->syncable())
             ->where(fn (Builder $query) => $query->whereNull('last_run_at')->orWhere('last_run_at', '<', $windowStart->utc()))
+            ->whereHas('executionLogs', fn (Builder $logs) => $logs
+                ->where('status', 'failed')
+                ->where('executed_at', '>=', $windowStart->utc()), '<', self::DAILY_ATTEMPTS)
             ->with('account')
             ->get()
             ->reject(fn (RetentionRule $rule) => $rule->account->needsReauth());

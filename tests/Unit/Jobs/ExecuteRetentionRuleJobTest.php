@@ -90,5 +90,7 @@ class ExecuteRetentionRuleJobTest extends RetentionTestCase
         $this->assertInstanceOf(WithoutOverlapping::class, $lock);
         $this->assertSame('retention-rule-9', $lock->key);
         $this->assertNull($lock->releaseAfter);
+        $this->assertSame(1600, $lock->expiresAfter);
+        $this->assertSame(1500, $job->timeout);
     }
 }
