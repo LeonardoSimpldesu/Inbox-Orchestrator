@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\RetentionRule;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -28,7 +29,8 @@ class DashboardController extends Controller
                     'retention_rules.retention_days',
                     'retention_rules.action',
                     'retention_rules.is_active',
-                ]),
+                ])
+                ->map(fn (RetentionRule $rule) => $rule->only(['id', 'name', 'filter_type', 'filter_value', 'retention_days', 'action', 'is_active'])),
         ]);
     }
 }

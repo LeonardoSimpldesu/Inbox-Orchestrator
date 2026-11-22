@@ -49,7 +49,11 @@ class EmailAccountController extends Controller
         $expected = $request->session()->pull(self::STATE_KEY);
         $state = $request->query('state');
 
-        if (! is_string($expected) || ! is_string($state) || ! hash_equals($expected, $state)) {
+        if (! is_string($expected)) {
+            return $this->back(error: 'Sua sessão expirou durante a conexão. Clique em Conectar conta Gmail de novo.');
+        }
+
+        if (! is_string($state) || ! hash_equals($expected, $state)) {
             return $this->back(error: 'Não foi possível validar a resposta do Google. Tente novamente.');
         }
 

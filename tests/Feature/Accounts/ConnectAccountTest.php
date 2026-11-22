@@ -74,7 +74,6 @@ class ConnectAccountTest extends AccountsTestCase
         foreach ([
             [['state' => 'wrong', 'code' => 'c'], self::STATE],
             [['code' => 'c'], self::STATE],
-            [['state' => self::STATE, 'code' => 'c'], null],
             [['state' => ['array'], 'code' => 'c'], self::STATE],
         ] as [$query, $sessionState]) {
             $this->hitCallback($user, $query, $sessionState)
@@ -86,6 +85,15 @@ class ConnectAccountTest extends AccountsTestCase
         $this->assertSame(0, EmailAccount::count());
     }
 
+    public function test_callback_after_the_session_expired_explains_it(): void
+    {
+        $this->hitCallback(User::factory()->create(), ['state' => self::STATE, 'code' => 'c'], null)
+            ->assertRedirect('/accounts')
+            ->assertSessionHas('error', 'Sua sessão expirou durante a conexão. Clique em Conectar conta Gmail de novo.');
+
+        $this->assertSame([], $this->provider->exchangedCodes);
+    }
+
     public function test_state_cannot_be_reused(): void
     {
         $user = User::factory()->create();
@@ -93,7 +101,7 @@ class ConnectAccountTest extends AccountsTestCase
         $this->assertNull(session('google_oauth_state'));
 
         $this->actingAs($user)->get('/accounts/google/callback?state='.self::STATE.'&code=auth-code')
-            ->assertSessionHas('error', 'Não foi possível validar a resposta do Google. Tente novamente.');
+            ->assertSessionHas('error', 'Sua sessão expirou durante a conexão. Clique em Conectar conta Gmail de novo.');
 
         $this->assertCount(1, $this->provider->exchangedCodes);
     }

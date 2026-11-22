@@ -85,6 +85,10 @@ class DashboardTest extends TestCase
                 ->where('stats.totalSenders', 1)
                 ->has('recentRules', 1)
                 ->where('recentRules.0.name', 'Expire promotions in 15 days')
+                ->has('recentRules.0', fn (Assert $rule) => $rule
+                    ->hasAll(['id', 'name', 'filter_type', 'filter_value', 'retention_days', 'action', 'is_active'])
+                    ->missingAll(['laravel_through_key', 'email_account_id'])
+                )
             );
     }
 
