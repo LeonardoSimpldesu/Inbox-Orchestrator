@@ -8,6 +8,7 @@ use App\Jobs\ApplySenderLabelJob;
 use App\Models\EmailAccount;
 use App\Models\EmailMessageMeta;
 use App\Models\EmailSender;
+use App\Models\RetentionRule;
 use App\Models\User;
 use App\Services\Sync\MessageStore;
 use Carbon\CarbonImmutable;
@@ -45,6 +46,7 @@ class ApplySenderLabelJobTest extends TestCase
     public function test_adds_new_and_removes_old_label_on_all_sender_mail(): void
     {
         $sender = tap($this->senderWithMail())->save();
+        RetentionRule::create(['email_account_id' => $sender->email_account_id, 'name' => 'c', 'filter_type' => 'sender', 'filter_value' => $sender->email, 'retention_days' => 0, 'action' => 'add_label', 'target_label' => 'Label_new', 'is_active' => true]);
 
         dispatch_sync(new ApplySenderLabelJob($sender->id, $sender->email_account_id, 'Label_new', 'Label_old'));
 
@@ -53,6 +55,17 @@ class ApplySenderLabelJobTest extends TestCase
         $this->assertSame(['Label_old'], $this->provider->modified[0]['remove']);
         $this->assertSame(['INBOX', 'Label_new'], EmailMessageMeta::where('provider_message_id', 'm1')->sole()->labels);
         $this->assertNull($sender->fresh()->label_applying_at);
+    }
+
+    public function test_stale_job_does_not_add_an_outdated_label(): void
+    {
+        $sender = tap($this->senderWithMail())->save();
+        RetentionRule::create(['email_account_id' => $sender->email_account_id, 'name' => 'c', 'filter_type' => 'sender', 'filter_value' => $sender->email, 'retention_days' => 0, 'action' => 'add_label', 'target_label' => 'Label_latest', 'is_active' => true]);
+
+        dispatch_sync(new ApplySenderLabelJob($sender->id, $sender->email_account_id, 'Label_new', 'Label_old'));
+
+        $this->assertSame([], $this->provider->modified[0]['add']);
+        $this->assertSame(['Label_old'], $this->provider->modified[0]['remove']);
     }
 
     public function test_removing_category_only_removes(): void

@@ -7,6 +7,7 @@ use App\Exceptions\ProviderUnavailable;
 use App\Exceptions\ReauthorizationRequired;
 use App\Jobs\Concerns\RunsPerSender;
 use App\Models\EmailSender;
+use App\Services\Senders\SenderCategories;
 use App\Services\Sync\MessageStore;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -32,13 +33,16 @@ class ApplySenderLabelJob implements ShouldQueue
         return 'sender-label';
     }
 
-    public function handle(EmailProviderInterface $provider, MessageStore $store): void
+    public function handle(EmailProviderInterface $provider, MessageStore $store, SenderCategories $categories): void
     {
         $sender = $this->usableSender();
 
         try {
             if ($sender !== null) {
-                $add = array_filter([$this->newLabel]);
+                // Jobs may run out of order while waiting for the account lock: only
+                // add the label if it is still the sender's category.
+                $current = $categories->forSenders(collect([$sender]))[$sender->id];
+                $add = array_filter([$this->newLabel === $current ? $this->newLabel : null]);
                 $remove = array_filter([$this->oldLabel]);
                 $ids = $provider->listAllMessageIds($sender->account, 'from:'.$sender->email);
 
