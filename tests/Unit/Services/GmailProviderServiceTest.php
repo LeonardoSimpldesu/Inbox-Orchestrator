@@ -727,4 +727,3 @@ class GmailProviderServiceTest extends TestCase
         ])->createLabel($this->connectedAccount(), 'Banco');
     }
 }
-
