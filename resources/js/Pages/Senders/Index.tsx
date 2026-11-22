@@ -106,18 +106,18 @@ export default function SendersIndex({ senders, accounts, filters, labels }: Sen
                         <option value="">Todas as contas</option>
                         {accounts.map((account) => <option key={account.id} value={account.id}>{account.account_email}</option>)}
                     </select>
-                    <select
-                        aria-label="Categoria"
-                        className={control}
-                        value={filters.category ?? ''}
-                        disabled={filters.account === null}
-                        title={filters.account === null ? 'Escolha uma conta para filtrar por categoria' : undefined}
-                        onChange={(e) => applyFilters({ category: e.target.value === '' ? null : e.target.value })}
-                    >
-                        <option value="">Todas as categorias</option>
-                        <option value="none">Sem categoria</option>
-                        {labels.map((label) => <option key={label.id} value={label.id}>{label.name}</option>)}
-                    </select>
+                    {filters.account !== null && (
+                        <select
+                            aria-label="Categoria"
+                            className={control}
+                            value={filters.category ?? ''}
+                            onChange={(e) => applyFilters({ category: e.target.value === '' ? null : e.target.value })}
+                        >
+                            <option value="">Todas as categorias</option>
+                            <option value="none">Sem categoria</option>
+                            {labels.map((label) => <option key={label.id} value={label.id}>{label.name}</option>)}
+                        </select>
+                    )}
                     <input type="search" aria-label="Buscar remetente" placeholder="Buscar nome, e-mail ou domínio" maxLength={100} className={`${control} w-56`} value={search} onChange={(e) => setSearch(e.target.value)} />
                     <label className="flex items-center gap-2 text-xs text-slate-300">
                         <input type="checkbox" className="h-4 w-4 accent-indigo-500" checked={filters.all} onChange={(e) => applyFilters({ all: e.target.checked })} />
