@@ -105,6 +105,14 @@ Menu **Assinaturas**: newsletters e e-mails promocionais das suas contas, do que
 
 A desinscrição de um clique é feita pelo servidor, e o endereço vem de um cabeçalho de e-mail. Por isso o app só chama hosts `https` públicos, valida e fixa o IP antes de conectar e não segue redirecionamentos.
 
+## Remetentes
+
+Menu **Remetentes**: quem escreve para você e não é newsletter (pessoas, bancos, serviços). As newsletters ficam no Hub.
+
+- **Categoria** = um marcador do Gmail. Escolher (ou criar) a categoria aplica o marcador aos e-mails existentes do remetente e cria uma regra para os próximos (aparece em Regras como "Categoria …"). Trocar a categoria move o marcador; "sem categoria" remove o marcador e a regra.
+- **Limpar…** arquiva ou manda para a lixeira os e-mails existentes, com a opção de fazer o mesmo com os próximos.
+- Seleção múltipla para limpar vários; para categorizar vários, eles precisam ser da mesma conta.
+
 ## Regras de expiração
 
 Menu **Regras TTL**: regras como "Promoções com mais de 15 dias → arquivar", "e-mails de `nubank.com.br` → marcador Banco" ou "marcador Faturas com mais de 90 dias → lixeira".

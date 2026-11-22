@@ -73,6 +73,11 @@ Every query starts from the authenticated user: `User::emailAccounts()`, `sender
 - Rules start paused; `canActivate()` requires `simulated_at`, and any edit clears it. `inbox:apply-retention` runs hourly and dispatches `ExecuteRetentionRuleJob` for active rules not run since today's 03:00 in `config('app.schedule_timezone')`. Every simulation/run/failure goes to `rule_execution_logs` (error = code only); after 3 failures in a day a rule waits for the next day. `ExecuteRetentionRuleJob` also takes the account's `sync-account-{id}` lock so a run and a sync never write labels at the same time.
 - Controllers look rules up with `whereIn(email_account_id, user's accounts)` (not the `hasManyThrough`, whose `laravel_through_key` must not reach saved models). Label ids in forms are validated against the account's Gmail labels.
 
+### Senders page
+- A sender's category **is** its retention rule (`filter_type=sender`, `action=add_label`); `SenderCategories` reads it for a page in one query and writes changes in bulk. No category column exists, so the Senders and Rules pages can't diverge.
+- `ApplySenderLabelJob` (new label on, old label off for the sender's existing mail) and `CleanSenderMailJob` share `Jobs\Concerns\RunsPerSender`: per-sender lock plus the account's `sync-account-{id}` lock, `label_applying_at` drives the "Aplicando…" state.
+- `EmailSender::scopeNonSubscriptions()` is the complement of `subscriptions()`; `scopeSearch()` is shared with the Hub.
+
 ### Frontend
 Inertia pages in `resources/js/Pages`, layouts `AppLayout` (authenticated) and `GuestLayout` (auth screens), shared inputs in `Components/`. Shared props are typed via module augmentation of `@inertiajs/core` (`InertiaConfig.sharedPageProps`) in `resources/js/types/inertia.d.ts`; domain types in `resources/js/types/index.d.ts`.
 

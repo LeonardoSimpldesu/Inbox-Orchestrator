@@ -193,6 +193,13 @@ Página `/retention-rules`. Design: `docs/superpowers/specs/2026-11-22-retention
    - **Manual:** botão **"Executar regras agora"**.
 6. **Chamada na API do Gmail:** `batchModify` em blocos de 1.000 (remover `INBOX`, aplicar `TRASH` ou o marcador); os metadados locais são atualizados em seguida. Cada execução e simulação fica no histórico (`rule_execution_logs`).
 
+### 4.4. Remetentes (gestão dos não-assinantes)
+Página `/senders`. Design: `docs/superpowers/specs/2026-11-23-senders-page-design.md`.
+1. Lista os remetentes que **não são assinaturas** (pessoas, bancos, serviços); "Mostrar assinaturas" inclui todos. Busca, filtros por conta e categoria, 100 por página.
+2. **Categoria = marcador do Gmail**: escolher (ou criar) o marcador aplica-o aos e-mails existentes do remetente e cria a regra "remetente → aplicar marcador, 0 dias" para os próximos. A categoria **é** essa regra (apagá-la na tela de Regras deixa o remetente sem categoria). Trocar tira o marcador antigo e aplica o novo; uma categoria por remetente.
+3. **Limpar**: arquivar ou mandar para a lixeira os e-mails existentes, com a opção de criar a regra para os próximos.
+4. Seleção múltipla: limpar vários de uma vez; categorizar vários de uma mesma conta (marcadores são de cada conta).
+
 ---
 
 ## 5. Arquitetura de Classes do Backend (PHP / Laravel)
@@ -234,6 +241,7 @@ app/
   - ✅ Worker de sincronização de metadados e remetentes: recentes (3 meses), histórico em fatias, novidades a cada 5 min, sem duplicação e respeitando a cota do Gmail.
   - ✅ Tela do Hub de Assinaturas com Unsubscribe e links diretos para o Gmail.
   - ✅ Tela de Regras de Expiração (TTL) com simulação obrigatória, execução diária e botão manual.
+  - ✅ Página Remetentes: categorias por marcador do Gmail e limpeza dos não-assinantes.
 
 * **Fase 2 (Follow-ups e Rotinas):**
   - Monitoramento de e-mails sem resposta (Inbound/Outbound).
