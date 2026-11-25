@@ -27,7 +27,7 @@ docker exec inbox_app php artisan migrate
 npm install
 
 # primeiro usuário (não existe tela de cadastro)
-docker exec -it inbox_app php artisan user:create "Seu Nome" voce@exemplo.com
+docker exec -it inbox_app php artisan user:create "Seu Nome" voce@example.com
 ```
 
 Acesse **http://localhost:8000**. O servidor do Vite roda em `localhost:5173`.
@@ -40,13 +40,13 @@ Contas são criadas e administradas pelo terminal. Todos os comandos aceitam o e
 
 | Comando | O que faz |
 |---|---|
-| `php artisan user:create "Nome" email@x.com` | Cria o usuário. Pede a senha no terminal (mínimo de 12 caracteres). |
-| `php artisan user:create "Nome" email@x.com --password=...` | Cria com a senha informada. |
-| `php artisan user:create "Nome" email@x.com -n` | Modo não interativo: gera uma senha forte e mostra uma única vez. |
-| `php artisan user:disable email@x.com` | Desativa: a pessoa não consegue mais entrar, as sessões abertas caem na hora e o "lembrar-me" deixa de valer. |
-| `php artisan user:enable email@x.com` | Reativa um usuário desativado. |
-| `php artisan user:delete email@x.com` | Remove o usuário e todos os dados dele (contas de e-mail, remetentes, regras). Pede para digitar o e-mail como confirmação. |
-| `php artisan user:reset-two-factor email@x.com` | Desliga o 2FA de quem perdeu o app autenticador e os códigos de recuperação. |
+| `php artisan user:create "Nome" email@example.com` | Cria o usuário. Pede a senha no terminal (mínimo de 12 caracteres). |
+| `php artisan user:create "Nome" email@example.com --password=...` | Cria com a senha informada. |
+| `php artisan user:create "Nome" email@example.com -n` | Modo não interativo: gera uma senha forte e mostra uma única vez. |
+| `php artisan user:disable email@example.com` | Desativa: a pessoa não consegue mais entrar, as sessões abertas caem na hora e o "lembrar-me" deixa de valer. |
+| `php artisan user:enable email@example.com` | Reativa um usuário desativado. |
+| `php artisan user:delete email@example.com` | Remove o usuário e todos os dados dele (contas de e-mail, remetentes, regras). Pede para digitar o e-mail como confirmação. |
+| `php artisan user:reset-two-factor email@example.com` | Desliga o 2FA de quem perdeu o app autenticador e os códigos de recuperação. |
 
 Rode-os com `docker exec -it inbox_app php artisan ...`. `user:disable`, `user:delete` e `user:reset-two-factor` aceitam `--force` para pular a confirmação.
 

@@ -1,0 +1,15 @@
+[program:inbox-queue]
+command=/usr/bin/php __APP_DIR__/artisan queue:work database --queue=default,sync --sleep=3 --tries=3 --timeout=1500 --max-time=3600 --memory=256
+directory=__APP_DIR__
+user=inbox
+numprocs=1
+autostart=true
+autorestart=true
+; Lets a Gmail sync (timeout 1500 s) finish before a restart kills it.
+stopwaitsecs=1600
+stopasgroup=true
+killasgroup=true
+redirect_stderr=true
+stdout_logfile=__APP_DIR__/storage/logs/queue.log
+stdout_logfile_maxbytes=10MB
+stdout_logfile_backups=3
