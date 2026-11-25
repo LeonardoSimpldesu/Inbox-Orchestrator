@@ -61,10 +61,21 @@ class DeployFilesTest extends TestCase
     public function test_files_contain_no_secrets(string $file): void
     {
         $this->assertDoesNotMatchRegularExpression(
-            '/re_[A-Za-z0-9]{8,}|GOCSPX-|base64:[A-Za-z0-9+\/=]{20,}|-----BEGIN /',
+            '/re_[A-Za-z0-9]{8,}|GOCSPX-|base64:[A-Za-z0-9+\/=]{20,}|-----BEGIN |AGE-SECRET-KEY-1|age1[0-9a-z]{50,}|K00[A-Za-z0-9]{20,}|hc-ping\.com\/[0-9a-f-]{20,}/',
             $this->read($file),
             "{$file} contains something that looks like a secret.",
         );
+    }
+
+    public function test_backup_env_template_has_no_values(): void
+    {
+        preg_match_all('/^([A-Z0-9_]+)=(.*)$/m', $this->read('deploy/backup.env.example'), $matches, PREG_SET_ORDER);
+
+        $this->assertNotEmpty($matches);
+        foreach ($matches as [, $key, $value]) {
+            $expected = $key === 'RCLONE_CONFIG_OFFSITE_TYPE' ? 'b2' : '';
+            $this->assertSame($expected, $value, "{$key} must stay empty in the template.");
+        }
     }
 
     public function test_nginx_template_is_hardened(): void

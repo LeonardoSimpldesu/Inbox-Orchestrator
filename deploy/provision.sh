@@ -40,7 +40,7 @@ say "Atualizando o sistema e instalando pacotes base"
 apt-get update -q
 apt-get upgrade -yq
 apt-get install -yq ca-certificates curl gnupg git unzip sqlite3 software-properties-common \
-    unattended-upgrades fail2ban ufw nginx supervisor certbot
+    unattended-upgrades fail2ban ufw nginx supervisor certbot age rclone
 timedatectl set-timezone UTC
 cat > /etc/apt/apt.conf.d/20auto-upgrades <<'CONF'
 APT::Periodic::Update-Package-Lists "1";
@@ -115,6 +115,11 @@ if [[ ! -d "${APP_DIR}/.git" ]]; then
     as_app git clone -q "$REPO_URL" "$APP_DIR"
 fi
 install -d -m 0700 -o "$APP_USER" -g "$APP_USER" "$BACKUP_DIR"
+install -d -m 0750 -o root -g "$APP_USER" /etc/inbox
+# Root-owned so a compromised app user can't redirect or disable the off-site copy.
+if [[ ! -f /etc/inbox/backup.env ]]; then
+    install -m 0640 -o root -g "$APP_USER" "${APP_DIR}/deploy/backup.env.example" /etc/inbox/backup.env
+fi
 
 cd "$APP_DIR"
 if [[ ! -f .env ]]; then
@@ -172,4 +177,6 @@ cat <<MSG
        sudo -u ${APP_USER} ${APP_DIR}/deploy/deploy.sh
   4. Crie o primeiro usuário:
        sudo -u ${APP_USER} php ${APP_DIR}/artisan user:create "Seu Nome" voce@example.com
+  5. Configure o backup fora da VPS (veja "Backup e restauração" no README):
+       sudo nano /etc/inbox/backup.env
 MSG
