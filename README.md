@@ -162,7 +162,8 @@ Uma VPS Ubuntu 24.04 dedicada ao app (1 vCPU e 2 GB de RAM bastam), com nginx + 
 | Arquivo | Para quê |
 |---|---|
 | `provision.sh` | Prepara a máquina do zero (root). Pode rodar de novo: nunca troca o `.env` nem a `APP_KEY`. |
-| `deploy.sh` | Publica a `main` atual (usuário `inbox`). Recusa começar se faltar variável no `.env`. |
+| `deploy.sh` | Publica uma tag `vX.Y.Z` da `main` (usuário `inbox`); sem argumento, a mais recente. Recusa começar se faltar variável no `.env`. |
+| `remote-deploy.sh` | Único comando que a chave de deploy do GitHub Actions pode rodar na VPS: recebe só o nome da tag. |
 | `backup.sh` | Backup diário do SQLite em `/var/backups/inbox` (14 dias) e cópia criptografada fora da VPS (Backblaze B2). |
 | `backup.env.example` | Modelo de `/etc/inbox/backup.env`: chaves do envio externo e do aviso de falha. |
 | `*.template` | nginx, PHP-FPM, Supervisor e cron, com o domínio como variável. |
@@ -197,9 +198,51 @@ O repositório é público: o domínio, os e-mails e as chaves só existem no `.
    sudo -u inbox php /var/www/inbox/artisan user:create "Seu Nome" voce@example.com
    ```
 
-### Atualizar
+### Publicar uma versão
 
-Depois que um PR entra na `main`: `sudo -u inbox /var/www/inbox/deploy/deploy.sh`. O app fica em manutenção durante o deploy; se algo falhar, ele continua em manutenção e o script diz em que passo parou. Mudou só o `.env`? Rode o deploy também (ele recria o cache de configuração).
+Quando a `main` estiver pronta para ir ao ar, crie uma tag:
+
+```bash
+git checkout main && git pull --ff-only
+git tag v1.2.0 && git push origin v1.2.0
+```
+
+O workflow **Deploy** (aba Actions) roda o CI nesse commit, confere que ele está na `main`, publica na VPS e confere `/up`. Se algo falhar, o workflow fica vermelho e o GitHub avisa por e-mail; se a falha for no meio do deploy, o app fica em manutenção até um deploy dar certo.
+
+- **Voltar uma versão:** Actions > Deploy > *Run workflow*, escolhendo a tag anterior em *Use workflow from*. Tags anteriores à publicação automática (ex.: `v1.0.0`) não podem ser publicadas. Migrations não são desfeitas.
+- **Na mão, na VPS:** `sudo -u inbox /var/www/inbox/deploy/deploy.sh` publica a tag mais recente; `deploy.sh v1.2.0` publica uma específica. Um deploy manual e um automático nunca rodam juntos.
+- Mudou só o `.env`? Rode o deploy da tag atual (ele recria o cache de configuração).
+
+### Configurar a publicação automática (uma vez)
+
+1. **Chave de deploy**, no seu computador (sem senha, pois o GitHub não digita senha):
+
+   ```bash
+   ssh-keygen -t ed25519 -N '' -C github-deploy -f ~/inbox-deploy-key
+   ```
+
+2. **Na VPS**, autorize a chave pública só para o comando de deploy (troque `AAAA...` pelo conteúdo de `~/inbox-deploy-key.pub`):
+
+   ```bash
+   sudo install -d -m 700 -o inbox -g inbox /home/inbox/.ssh
+   echo 'restrict,command="/var/www/inbox/deploy/remote-deploy.sh" ssh-ed25519 AAAA... github-deploy' \
+     | sudo -u inbox tee -a /home/inbox/.ssh/authorized_keys > /dev/null
+   sudo chmod 600 /home/inbox/.ssh/authorized_keys
+   ```
+
+   E pegue a identificação do servidor (troque pelo seu domínio):
+
+   ```bash
+   echo "inbox.example.com $(cut -d' ' -f1,2 /etc/ssh/ssh_host_ed25519_key.pub)"
+   ```
+
+3. **No GitHub**, em Settings > Environments, crie o environment `production`:
+   - *Deployment branches and tags*: **Selected branches and tags**, regra de **tag** `v*`;
+   - *Environment secrets*: `DEPLOY_HOST` (o domínio do app), `DEPLOY_SSH_KEY` (conteúdo de `~/inbox-deploy-key`, a privada) e `DEPLOY_KNOWN_HOSTS` (a linha do passo 2).
+
+   Depois apague a chave privada do computador (`rm ~/inbox-deploy-key`): ela só precisa existir no GitHub.
+4. **Proteja as tags**: Settings > Rules > Rulesets > *New tag ruleset*, alvo `v*`, com *Restrict creations*, *Restrict updates* e *Restrict deletions*, e você (Repository admin) na lista de *Bypass*. Assim só você cria tags de versão, e nenhuma é movida ou apagada.
+5. **Primeira vez:** a VPS precisa ter o `remote-deploy.sh`. Se ela ainda roda uma versão anterior, publique uma última vez pelo método antigo (`sudo -u inbox /var/www/inbox/deploy/deploy.sh`, que traz a `main`) e só então crie a primeira tag.
 
 ### Backup e restauração
 

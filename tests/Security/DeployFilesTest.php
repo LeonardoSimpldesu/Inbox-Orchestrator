@@ -21,6 +21,7 @@ class DeployFilesTest extends TestCase
         $root = dirname(__DIR__, 2);
         $files = array_merge(
             glob($root.'/deploy/*') ?: [],
+            glob($root.'/.github/workflows/*.yml') ?: [],
             [$root.'/.env.example', $root.'/.env.production.example', $root.'/README.md'],
         );
 
@@ -76,6 +77,24 @@ class DeployFilesTest extends TestCase
             $expected = $key === 'RCLONE_CONFIG_OFFSITE_TYPE' ? 'b2' : '';
             $this->assertSame($expected, $value, "{$key} must stay empty in the template.");
         }
+    }
+
+    public function test_deploy_workflow_uses_secrets_and_pins_the_host_key(): void
+    {
+        $workflow = $this->read('.github/workflows/deploy.yml');
+
+        foreach ([
+            'environment: production',
+            'secrets.DEPLOY_HOST',
+            'secrets.DEPLOY_SSH_KEY',
+            'secrets.DEPLOY_KNOWN_HOSTS',
+            'StrictHostKeyChecking=yes',
+            'uses: ./.github/workflows/ci.yml',
+        ] as $expected) {
+            $this->assertStringContainsString($expected, $workflow);
+        }
+
+        $this->assertStringNotContainsString('StrictHostKeyChecking=no', $workflow);
     }
 
     public function test_nginx_template_is_hardened(): void
