@@ -13,6 +13,12 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# An explicit `bash` turns on `pipefail`; the default shell does not, and a
+# failing PHPUnit piped into `tee` would otherwise pass the step.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   php:
     name: PHP tests (100% coverage) and style
