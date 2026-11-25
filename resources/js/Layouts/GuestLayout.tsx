@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Head } from '@inertiajs/react';
 import { Layers } from 'lucide-react';
+import PublicLinks from '@/Components/PublicLinks';
 
 interface GuestLayoutProps {
     title: string;
@@ -27,6 +28,10 @@ export default function GuestLayout({ title, description, children }: GuestLayou
                 {description && <p className="text-sm text-slate-400 mt-1">{description}</p>}
                 <div className="mt-6">{children}</div>
             </div>
+
+            <footer className="mt-8">
+                <PublicLinks />
+            </footer>
         </div>
     );
 }

@@ -3,11 +3,15 @@
 use App\Http\Controllers\AccountLabelController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmailAccountController;
+use App\Http\Controllers\PrivacyPolicyController;
 use App\Http\Controllers\RetentionRuleController;
 use App\Http\Controllers\SenderController;
 use App\Http\Controllers\Settings\SecurityController;
 use App\Http\Controllers\SubscriptionController;
 use Illuminate\Support\Facades\Route;
+
+Route::inertia('/sobre', 'Public/About')->name('about');
+Route::get('/privacidade', PrivacyPolicyController::class)->name('privacy');
 
 Route::middleware(['auth', 'auth.session', 'active'])->group(function () {
     Route::get('/', DashboardController::class)->name('dashboard');

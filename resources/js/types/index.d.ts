@@ -135,3 +135,10 @@ export interface SenderRow {
     applying: boolean;
     gmail_url: string;
 }
+
+export interface PrivacyPageProps {
+    controllerName: string | null;
+    contactEmail: string | null;
+    updatedAt: string;
+    disconnectedRetentionDays: number;
+}
