@@ -38,6 +38,10 @@ class EnvironmentHardeningTest extends TestCase
             'encrypted session' => ['SESSION_ENCRYPT', 'true'],
             'Inertia DevTools disabled' => ['INERTIA_DEVTOOLS_ENABLED', 'false'],
             'no debug logging' => ['LOG_LEVEL', 'warning'],
+            'resend mailer' => ['MAIL_MAILER', 'resend'],
+            'app name' => ['APP_NAME', 'Inbox Orchestrator'],
+            'oauth app published' => ['GOOGLE_OAUTH_TESTING', 'false'],
+            'sqlite wal' => ['DB_JOURNAL_MODE', 'wal'],
         ];
     }
 
@@ -45,6 +49,13 @@ class EnvironmentHardeningTest extends TestCase
     public function test_production_env_template_is_hardened(string $key, string $expected): void
     {
         $this->assertSame($expected, $this->envValue('.env.production.example', $key), "{$key} in .env.production.example");
+    }
+
+    public function test_production_env_template_lists_required_keys(): void
+    {
+        foreach (['RESEND_KEY', 'PRIVACY_CONTROLLER_NAME', 'PRIVACY_CONTACT_EMAIL'] as $key) {
+            $this->assertNotNull($this->envValue('.env.production.example', $key), "{$key} missing from .env.production.example");
+        }
     }
 
     public function test_session_payloads_are_encrypted_by_default(): void
