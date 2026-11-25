@@ -14,6 +14,7 @@ import {
     Mail,
     Users
 } from 'lucide-react';
+import PublicLinks from '@/Components/PublicLinks';
 
 interface AppLayoutProps {
     children: ReactNode;
@@ -135,8 +136,8 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
             </main>
 
             {/* Footer */}
-            <footer className="border-t border-slate-800/60 bg-slate-900/30 py-4 text-center text-xs text-slate-500">
-                Inbox Orchestrator &bull; Suporte para múltiplas contas &bull; Docker Containerizado
+            <footer className="border-t border-slate-800/60 bg-slate-900/30 py-4">
+                <PublicLinks />
             </footer>
         </div>
     );
