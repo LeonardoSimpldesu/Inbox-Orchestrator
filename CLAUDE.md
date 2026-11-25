@@ -22,7 +22,7 @@ docker exec inbox_app php artisan test                 # full PHPUnit suite (inc
 docker exec inbox_app php artisan test --exclude-group=audit
 docker exec inbox_app php artisan test --filter=LoginTest              # single class
 docker exec inbox_app php artisan test --filter=test_recovery_code_works_only_once
-docker exec inbox_app php artisan test --coverage
+docker exec inbox_app vendor/bin/phpunit --exclude-group=audit --coverage-text --only-summary-for-coverage-text   # coverage (app/ must be 100%)
 docker exec inbox_app vendor/bin/pint --test <paths>
 docker exec inbox_app php artisan migrate
 docker exec inbox_app php artisan optimize:clear       # needed after Inertia/Blade upgrades (stale compiled views)
@@ -31,6 +31,8 @@ npm run build
 npm run test:security                                  # node --test tests/js/*.test.mjs: Vite must not serve sensitive files
 npm run test:js                                        # node --test tests/js/*.test.ts: pure frontend helpers (resources/js/lib/dates.ts)
 ```
+
+**CI** (`.github/workflows/ci.yml`, GitHub Actions on pushes and PRs to `main`) runs the same checks in three jobs: PHP tests with a 100% line-coverage gate + Pint, the dependency audit (separate so an external advisory doesn't look like a broken test), and the frontend (typecheck, build, `test:security`, `test:js`). Tests run without compiled assets (`withoutVite()` in `tests/TestCase.php`) and without real credentials. Note: `php artisan test --coverage --min` silently skips the check in this setup; use PHPUnit's summary.
 
 **Before any merge into `main` or opening a PR, run all of the above checks** (full PHPUnit incl. audit, typecheck, build, test:security, test:js), again on the merged result. After merging into `main`, push `main`.
 

@@ -1,5 +1,7 @@
 # Inbox Orchestrator
 
+[![CI](https://github.com/LeonardoSimpldesu/Inbox-Orchestrator/actions/workflows/ci.yml/badge.svg)](https://github.com/LeonardoSimpldesu/Inbox-Orchestrator/actions/workflows/ci.yml)
+
 Cockpit para automatizar a limpeza de caixas de e-mail: desinscrição de newsletters, regras de expiração (TTL) e organização por remetente. Uso pessoal, para o dono e algumas pessoas próximas. Não há cadastro público.
 
 Especificação completa: [`SPEC.md`](SPEC.md). Débitos conhecidos: [`docs/debito-tecnico.md`](docs/debito-tecnico.md).
@@ -134,11 +136,11 @@ Menu **Regras TTL**: regras como "Promoções com mais de 15 dias → arquivar",
 
 ## Testes e verificações
 
-Rode tudo antes de qualquer merge na `main` ou pull request:
+O CI (GitHub Actions, `.github/workflows/ci.yml`) roda essas verificações em todo push e pull request para a `main`. Rode tudo localmente também antes de qualquer merge na `main` ou pull request:
 
 ```bash
 docker exec inbox_app php artisan test            # PHPUnit, inclui o audit de dependências
-docker exec inbox_app php artisan test --coverage # cobertura (meta: 100% de app/)
+docker exec inbox_app vendor/bin/phpunit --exclude-group=audit --coverage-text --only-summary-for-coverage-text  # cobertura (meta: 100% de app/)
 npm run typecheck                                 # TypeScript strict
 npm run build                                     # build de produção
 npm run test:security                             # o Vite não pode servir arquivos sensíveis

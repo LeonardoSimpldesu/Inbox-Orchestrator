@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  php:
+    name: PHP tests (100% coverage) and style
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: mbstring, intl, pdo_sqlite, sqlite3, zip, bcmath
+          coverage: pcov
+          tools: composer:v2
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache/files
+          key: composer-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-
+
+      - run: composer install --no-interaction --prefer-dist --no-progress
+
+      # Tests never use real credentials: the app key is generated per run and
+      # Gmail is replaced by a fake provider.
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      # `php artisan test --coverage --min` silently skips the check here, so
+      # PHPUnit's own summary is used to require 100% line coverage of app/.
+      - name: PHPUnit (without the dependency audit) with 100% coverage
+        run: |
+          vendor/bin/phpunit --exclude-group=audit --coverage-text --only-summary-for-coverage-text --colors=never | tee coverage.txt
+          grep -Eq '^ *Lines: +100\.00%' coverage.txt || { echo "::error::app/ line coverage is below 100%"; exit 1; }
+
+      - name: Pint
+        run: vendor/bin/pint --test
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: mbstring, intl, pdo_sqlite, sqlite3, zip, bcmath
+          coverage: none
+          tools: composer:v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: composer audit + npm audit (exceptions in audit-allowlist.json)
+        run: php artisan test --group=audit
+
+  frontend:
+    name: Frontend typecheck, build and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm run test:security
+      - run: npm run test:js
