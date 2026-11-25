@@ -163,7 +163,8 @@ Uma VPS Ubuntu 24.04 dedicada ao app (1 vCPU e 2 GB de RAM bastam), com nginx + 
 |---|---|
 | `provision.sh` | Prepara a máquina do zero (root). Pode rodar de novo: nunca troca o `.env` nem a `APP_KEY`. |
 | `deploy.sh` | Publica a `main` atual (usuário `inbox`). Recusa começar se faltar variável no `.env`. |
-| `backup.sh` | Backup diário do SQLite em `/var/backups/inbox` (14 dias). |
+| `backup.sh` | Backup diário do SQLite em `/var/backups/inbox` (14 dias) e cópia criptografada fora da VPS (Backblaze B2). |
+| `backup.env.example` | Modelo de `/etc/inbox/backup.env`: chaves do envio externo e do aviso de falha. |
 | `*.template` | nginx, PHP-FPM, Supervisor e cron, com o domínio como variável. |
 
 O repositório é público: o domínio, os e-mails e as chaves só existem no `.env` e em `/etc` da VPS. Nunca coloque esses valores em arquivos versionados (o `DeployFilesTest` barra IPs, e-mails reais e chaves).
@@ -202,12 +203,39 @@ Depois que um PR entra na `main`: `sudo -u inbox /var/www/inbox/deploy/deploy.sh
 
 ### Backup e restauração
 
-O cron roda `deploy/backup.sh` às 03:30 UTC (log em `storage/logs/backup.log`). Para restaurar:
+O cron roda `deploy/backup.sh` às 03:30 UTC (log em `storage/logs/backup.log`). Ele guarda 14 dias em `/var/backups/inbox` e, se `/etc/inbox/backup.env` estiver preenchido, envia uma cópia criptografada com [`age`](https://github.com/FiloSottile/age) para o Backblaze B2. A VPS só tem a chave **pública** do `age` e uma chave do B2 **só de escrita**: quem invadir a VPS não lê nem apaga os backups enviados.
+
+**Configurar o envio externo (uma vez):**
+
+1. No seu computador: `age-keygen -o inbox-backup-age.key`. A linha `Public key: age1…` vai para a VPS; o arquivo (chave privada) vai para o gerenciador de senhas, junto com a `APP_KEY`. Sem os dois, nenhum backup é restaurável.
+2. No Backblaze B2:
+   - crie um bucket **privado**;
+   - em *Lifecycle Settings*, use uma regra própria com *Days till hide* = 30 e *Days till delete* = 1 (as cópias somem depois de ~31 dias);
+   - em *Application Keys*, crie uma chave restrita a esse bucket com acesso **Write Only**.
+3. Opcional, aviso de falha: no [healthchecks.io](https://healthchecks.io), crie um check com período de 1 dia e tolerância de 2 horas. O script avisa o sucesso e chama `<URL>/fail` quando algo dá errado; se o aviso diário não chegar, você recebe um e-mail.
+4. Na VPS, preencha `sudo nano /etc/inbox/backup.env` (criado pelo `provision.sh`, dono root, só leitura para o usuário `inbox`) e teste:
+
+   ```bash
+   sudo -u inbox /var/www/inbox/deploy/backup.sh
+   ```
+
+   O log deve terminar com `envio externo ok`, e o arquivo `db-….sqlite.gz.age` aparece no bucket.
+
+**Restaurar:**
+
+```bash
+# Da cópia local (na VPS):
+gunzip -c /var/backups/inbox/db-AAAAMMDD-HHMMSS.sqlite.gz > database.sqlite
+# Ou da cópia no B2: baixe o .gz.age pelo site do Backblaze e, no seu computador:
+age -d -i inbox-backup-age.key db-AAAAMMDD-HHMMSS.sqlite.gz.age | gunzip > database.sqlite
+```
+
+Com o `database.sqlite` na VPS (ex.: `scp`), troque o banco com o app parado. Numa VPS nova, rode antes o `provision.sh` e coloque no `.env` a **mesma** `APP_KEY` de antes.
 
 ```bash
 sudo supervisorctl stop inbox-queue
 sudo -u inbox php /var/www/inbox/artisan down
-gunzip -c /var/backups/inbox/db-AAAAMMDD-HHMMSS.sqlite.gz | sudo -u inbox tee /var/www/inbox/database/database.sqlite > /dev/null
+sudo install -m 600 -o inbox -g inbox database.sqlite /var/www/inbox/database/database.sqlite
 sudo -u inbox rm -f /var/www/inbox/database/database.sqlite-wal /var/www/inbox/database/database.sqlite-shm
 sudo -u inbox php /var/www/inbox/artisan up
 sudo supervisorctl start inbox-queue
