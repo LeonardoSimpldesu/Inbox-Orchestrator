@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # deploy.yml runs the same checks on the tagged commit before publishing it.
+  workflow_call:
 
 permissions:
   contents: read
