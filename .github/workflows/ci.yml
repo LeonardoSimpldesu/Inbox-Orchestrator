@@ -60,6 +60,9 @@ jobs:
       - name: Pint
         run: vendor/bin/pint --test
 
+      - name: Shell scripts (deploy/)
+        run: shellcheck deploy/*.sh
+
   audit:
     name: Dependency audit
     runs-on: ubuntu-latest
