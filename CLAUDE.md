@@ -34,7 +34,7 @@ npm run test:js                                        # node --test tests/js/*.
 
 **CI** (`.github/workflows/ci.yml`, GitHub Actions on pushes and PRs to `main`) runs the same checks in three jobs: PHP tests with a 100% line-coverage gate + Pint, the dependency audit (separate so an external advisory doesn't look like a broken test), and the frontend (typecheck, build, `test:security`, `test:js`). Tests run without compiled assets (`withoutVite()` in `tests/TestCase.php`) and without real credentials. Note: `php artisan test --coverage --min` silently skips the check in this setup; use PHPUnit's summary.
 
-**Before any merge into `main` or opening a PR, run all of the above checks** (full PHPUnit incl. audit, typecheck, build, test:security, test:js), again on the merged result. After merging into `main`, push `main`.
+**Before any merge into `main` or opening a PR, run all of the above checks** (full PHPUnit incl. audit, typecheck, build, test:security, test:js), again on the merged result. `main` is protected (GitHub ruleset): no direct pushes; changes land through a branch + PR with the three CI jobs green and the branch up to date, merged by rebase only (`gh pr merge <n> --rebase --delete-branch`). Afterwards `git checkout main && git pull --ff-only` and check that the CI run on `main` is green.
 
 User management (no public registration): `php artisan user:create|user:disable|user:enable|user:delete|user:reset-two-factor` (see README).
 
