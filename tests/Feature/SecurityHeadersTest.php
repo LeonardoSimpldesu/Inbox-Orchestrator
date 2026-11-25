@@ -14,6 +14,11 @@ class SecurityHeadersTest extends TestCase
         $response->assertHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
     }
 
+    public function test_responses_ask_search_engines_not_to_index(): void
+    {
+        $this->get('/sobre')->assertHeader('X-Robots-Tag', 'noindex, nofollow');
+    }
+
     public function test_hsts_is_not_sent_outside_production(): void
     {
         $this->get('https://localhost/')->assertHeaderMissing('Strict-Transport-Security');

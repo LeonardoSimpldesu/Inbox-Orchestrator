@@ -18,6 +18,8 @@ class SecurityHeaders
 
         $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
         $response->headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+        // Private app: the public pages exist for Google's OAuth review, not for search results.
+        $response->headers->set('X-Robots-Tag', 'noindex, nofollow');
 
         // Only meaningful over HTTPS; sending it from local/dev hosts would pin
         // browsers to HTTPS for localhost.
