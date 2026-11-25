@@ -160,7 +160,7 @@ Histórico de auditoria das execuções de regras.
 4. Callback valida o `state`, recebe o `code` e troca por `access_token` e `refresh_token` (`access_type=offline`, `prompt=consent`). Conexões sem todas as permissões ou de um Gmail já conectado por outro usuário são recusadas.
 5. Dispara imediatamente o job inicial de sincronização de metadados em segundo plano.
 6. **Reconectar** renova o acesso da mesma conta. **Desconectar** revoga o acesso no Google e faz soft delete; reconectar depois restaura remetentes e regras.
-7. Com o app do Google em modo Teste, o acesso expira em 7 dias: a tela mostra "Reconecte até dd/mm" e o painel avisa quando falta pouco ou já expirou (ver `docs/debito-tecnico.md`, item 7). Design: `docs/superpowers/specs/2026-11-18-gmail-oauth-design.md`.
+7. O app do Google está publicado em Produção sem verificação (tela "app não verificado", limite de 100 usuários), então o acesso não expira por semana. Se voltar ao modo Teste, `GOOGLE_OAUTH_TESTING=true` faz a tela mostrar "Reconecte até dd/mm" e o painel avisar quando falta pouco ou já expirou. Design: `docs/superpowers/specs/2026-11-18-gmail-oauth-design.md`.
 
 ### 4.1.1. Sincronização de metadados
 Só metadados (remetente, assunto, data, labels, cabeçalhos de desinscrição); nunca corpo ou anexos. Spam e lixeira não são importados.
