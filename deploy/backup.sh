@@ -32,6 +32,8 @@ if [[ -r "$BACKUP_CONFIG" ]]; then
 fi
 
 trap 'on_error $LINENO' ERR
+# sudo keeps the caller's directory (e.g. /root), which find can't return to.
+cd "$BACKUP_DIR"
 umask 077
 upload=""
 trap 'rm -f "$upload"' EXIT
@@ -51,9 +53,17 @@ if [[ -z "${BACKUP_AGE_RECIPIENT:-}" || -z "${BACKUP_REMOTE_PATH:-}" ]]; then
     exit 0
 fi
 
+# Without the remote prefix rclone treats the value as a local path and
+# "succeeds" without the copy ever leaving the server.
+if [[ "$BACKUP_REMOTE_PATH" != offsite:?* ]]; then
+    log "BACKUP_REMOTE_PATH deve começar com offsite: (ex.: offsite:<bucket>/db)"
+    false
+fi
+
 upload=$(mktemp "${BACKUP_DIR}/.upload-XXXXXX")
 age -r "$BACKUP_AGE_RECIPIENT" -o "$upload" "${target}.gz"
-# The B2 key is write-only, so rclone must not list the destination first.
-rclone copyto --no-check-dest --retries 3 "$upload" "${BACKUP_REMOTE_PATH%/}/${name}.gz.age"
+# The B2 key is write-only, so rclone must not list the destination first; the
+# remote comes from RCLONE_CONFIG_OFFSITE_* (no config file).
+rclone copyto --config "" --no-check-dest --retries 3 "$upload" "${BACKUP_REMOTE_PATH%/}/${name}.gz.age"
 log "envio externo ok: ${name}.gz.age"
 ping_heartbeat ""
