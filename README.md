@@ -132,7 +132,7 @@ Menu **Regras TTL**: regras como "Promoções com mais de 15 dias → arquivar",
 |---|---|
 | Padrão | `MAIL_MAILER=log`: os e-mails vão para `storage/logs/laravel.log`. |
 | Desenvolvimento | Mailtrap (sandbox): troque os `MAIL_*` do `.env` pelos valores indicados no `.env.example` e rode `php artisan config:clear`. |
-| Produção | Resend (a habilitar): veja `.env.production.example`. |
+| Produção | Resend (`MAIL_MAILER=resend`, `RESEND_KEY`). O domínio do remetente (`MAIL_FROM_ADDRESS`) precisa estar verificado no painel do Resend. |
 
 ## Testes e verificações
 
@@ -153,7 +153,70 @@ npm run test:js                                   # funções puras do frontend 
 
 ## Produção
 
-Parta de [`.env.production.example`](.env.production.example): debug desligado, cookie de sessão seguro e criptografado, DevTools desligado e logs a partir de `warning`. Hospedagem alvo: VPS com nginx + PHP-FPM + Supervisor/Cron (detalhes no SPEC).
+Uma VPS Ubuntu 24.04 dedicada ao app (1 vCPU e 2 GB de RAM bastam), com nginx + PHP-FPM 8.5 + Supervisor (fila) + cron (agendador e backup), HTTPS pelo Let's Encrypt. Tudo fica em [`deploy/`](deploy/):
+
+| Arquivo | Para quê |
+|---|---|
+| `provision.sh` | Prepara a máquina do zero (root). Pode rodar de novo: nunca troca o `.env` nem a `APP_KEY`. |
+| `deploy.sh` | Publica a `main` atual (usuário `inbox`). Recusa começar se faltar variável no `.env`. |
+| `backup.sh` | Backup diário do SQLite em `/var/backups/inbox` (14 dias). |
+| `*.template` | nginx, PHP-FPM, Supervisor e cron, com o domínio como variável. |
+
+O repositório é público: o domínio, os e-mails e as chaves só existem no `.env` e em `/etc` da VPS. Nunca coloque esses valores em arquivos versionados (o `DeployFilesTest` barra IPs, e-mails reais e chaves).
+
+### Primeira instalação
+
+1. No DNS do domínio, crie um registro `A` do subdomínio (ex.: `inbox`) apontando para o IP da VPS e espere propagar (`dig +short inbox.example.com`).
+2. Na VPS, como root (com sua chave SSH já autorizada, para o script poder desligar o login por senha):
+
+   ```bash
+   curl -fsSLO https://raw.githubusercontent.com/LeonardoSimpldesu/Inbox-Orchestrator/main/deploy/provision.sh
+   less provision.sh   # leia antes de rodar
+   APP_DOMAIN=inbox.example.com ADMIN_EMAIL=voce@example.com bash provision.sh
+   ```
+
+3. Preencha o `.env` (`sudo -u inbox nano /var/www/inbox/.env`):
+
+   | Variável | De onde vem |
+   |---|---|
+   | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google Cloud Console > Google Auth Platform > Clients |
+   | `RESEND_KEY` | Painel do Resend > API Keys (permissão só de envio) |
+   | `MAIL_FROM_ADDRESS` | Um endereço do domínio verificado no Resend |
+   | `PRIVACY_CONTROLLER_NAME`, `PRIVACY_CONTACT_EMAIL` | Responsável e contato mostrados em `/privacidade` |
+
+   `APP_URL` e `GOOGLE_REDIRECT_URI` já vêm com o domínio, e a `APP_KEY` já foi gerada. **Guarde uma cópia da `APP_KEY` fora da VPS** (gerenciador de senhas): sem ela, nenhum backup consegue ler os tokens do Gmail.
+4. Publique e crie o primeiro usuário:
+
+   ```bash
+   sudo -u inbox /var/www/inbox/deploy/deploy.sh
+   sudo -u inbox php /var/www/inbox/artisan user:create "Seu Nome" voce@example.com
+   ```
+
+### Atualizar
+
+Depois que um PR entra na `main`: `sudo -u inbox /var/www/inbox/deploy/deploy.sh`. O app fica em manutenção durante o deploy; se algo falhar, ele continua em manutenção e o script diz em que passo parou. Mudou só o `.env`? Rode o deploy também (ele recria o cache de configuração).
+
+### Backup e restauração
+
+O cron roda `deploy/backup.sh` às 03:30 UTC (log em `storage/logs/backup.log`). Para restaurar:
+
+```bash
+sudo supervisorctl stop inbox-queue
+sudo -u inbox php /var/www/inbox/artisan down
+gunzip -c /var/backups/inbox/db-AAAAMMDD-HHMMSS.sqlite.gz | sudo -u inbox tee /var/www/inbox/database/database.sqlite > /dev/null
+sudo -u inbox rm -f /var/www/inbox/database/database.sqlite-wal /var/www/inbox/database/database.sqlite-shm
+sudo -u inbox php /var/www/inbox/artisan up
+sudo supervisorctl start inbox-queue
+```
+
+### Conferir
+
+```bash
+curl -sI https://inbox.example.com/up          # 200, com Strict-Transport-Security e X-Robots-Tag
+sudo supervisorctl status                           # inbox-queue RUNNING
+sudo -u inbox php /var/www/inbox/artisan schedule:list
+tail -f /var/www/inbox/storage/logs/laravel-$(date +%F).log
+```
 
 ## Documentação
 

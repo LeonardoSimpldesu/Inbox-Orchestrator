@@ -7,6 +7,7 @@ Itens conhecidos que ficaram para depois. Cada um traz o impacto, onde está e u
 | 7 | Acesso ao Gmail expira a cada 7 dias (app do Google em modo Teste) | UX / operação | Alta antes de uso diário |
 | 11 | Novidades do Gmail por polling (5 min) em vez de notificações push | Desempenho / tempo real | Média (quando houver servidor público) |
 | 19 | Regras sem busca livre nem filtros combinados | Funcionalidade | Baixa |
+| 20 | Backup do banco só dentro da própria VPS | Operação / recuperação | Média |
 
 ---
 
@@ -48,3 +49,18 @@ Mesmo sem a expiração semanal, o refresh token ainda pode ser invalidado (senh
 **Onde:** `RetentionRuleRequest`, `RuleQuery`, `retention_rules.filter_type`.
 
 **Sugestão:** permitir uma lista de condições (E); a busca livre só com pré-visualização obrigatória e validação de operadores perigosos.
+
+## 20. Backup do banco só dentro da própria VPS
+
+**Origem:** publicação em produção (2026-11-25).
+
+**O que acontece:** `deploy/backup.sh` guarda 14 dias de backups do SQLite em `/var/backups/inbox`, no mesmo disco do app. Se a VPS for perdida, os backups vão junto.
+
+**Impacto:** o Gmail continua sendo a fonte da verdade. Perder o banco custa reconectar as contas, esperar a nova sincronização e recriar regras e categorias (as categorias são marcadores do Gmail e sobrevivem; as regras que as aplicam, não).
+
+**Onde:** `deploy/backup.sh`, `deploy/cron.template`.
+
+**Soluções:**
+1. Snapshot automático da VPS, se a hospedagem oferecer.
+2. Enviar o backup já criptografado (ex.: `age`) para um armazenamento externo (S3, Backblaze B2) com uma chave que não fique na VPS.
+

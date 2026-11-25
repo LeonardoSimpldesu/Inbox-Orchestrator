@@ -30,6 +30,7 @@ npm run typecheck                                      # tsc --noEmit
 npm run build
 npm run test:security                                  # node --test tests/js/*.test.mjs: Vite must not serve sensitive files
 npm run test:js                                        # node --test tests/js/*.test.ts: pure frontend helpers (resources/js/lib/dates.ts)
+docker run --rm -v "$PWD/deploy:/d:ro" koalaman/shellcheck:stable /d/provision.sh /d/deploy.sh /d/backup.sh
 ```
 
 **CI** (`.github/workflows/ci.yml`, GitHub Actions on pushes and PRs to `main`) runs the same checks in three jobs: PHP tests with a 100% line-coverage gate + Pint, the dependency audit (separate so an external advisory doesn't look like a broken test), and the frontend (typecheck, build, `test:security`, `test:js`). Tests run without compiled assets (`withoutVite()` in `tests/TestCase.php`) and without real credentials. Note: `php artisan test --coverage --min` silently skips the check in this setup; use PHPUnit's summary.
@@ -87,6 +88,12 @@ Inertia pages in `resources/js/Pages`, layouts `AppLayout` (authenticated) and `
 - Docker publishes ports on `127.0.0.1` only; `vite.config.js` restricts `server.fs.allow` to `resources/` and `node_modules/` (the dev server otherwise serves the SQLite DB, logs and source). Guarded by `tests/Security/EnvironmentHardeningTest` and `tests/js/vite-fs-exposure.test.mjs`.
 - `SecurityHeaders` middleware (Referrer-Policy, Permissions-Policy, HSTS only on HTTPS in production). `.env.production.example` is the hardened production template.
 - `tests/Security/DependencyAuditTest` (group `audit`) fails on any `composer audit`/`npm audit` advisory not in `audit-allowlist.json`; entries need a reason and an expiry date, and production npm deps can never be allowlisted.
+
+### Production (VPS)
+- Native install on a dedicated Ubuntu 24.04 VPS (nginx + PHP-FPM 8.5 + Supervisor + cron, Let's Encrypt); no Docker in production. `deploy/provision.sh` (root, idempotent: never replaces `.env` or a set `APP_KEY`, only disables SSH passwords when a key is authorized), `deploy/deploy.sh` (as `inbox`, refuses missing `.env` keys and prints names only; body inside `main()` because `git reset` rewrites the running file), `deploy/backup.sh` (`sqlite3 .backup`, 14 days). Templates use `__APP_DOMAIN__`/`__APP_DIR__`/`__PHP_VERSION__`. Steps in README "Produção".
+- **The repository is public**: no IP, real domain, real e-mail, key or secret in committed files, commits or PR text. `tests/Security/DeployFilesTest` scans `deploy/`, the env templates and README.
+- Public pages for Google's OAuth review: `/sobre` and `/privacidade` (`PrivacyPolicyController`, contact from `config/privacy.php` / `.env`). `/` stays the protected Dashboard. Every response carries `X-Robots-Tag: noindex, nofollow`.
+- SQLite runs in WAL with `busy_timeout` 5000 (`config/database.php`), since the web and the queue write at the same time.
 
 ### Docker gotchas
 The `vite` container has its own `node_modules` volume (Linux native binaries for rolldown/lightningcss) and runs `npm ci` on start: restart it after changing `package-lock.json`. The host `node_modules` is macOS-only.
