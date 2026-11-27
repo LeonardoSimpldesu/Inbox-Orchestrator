@@ -1,4 +1,14 @@
 # HTTP only: answers the Let's Encrypt challenge before a certificate exists.
+# Any Host other than the app's gets no answer (the app would otherwise
+# answer every name that points at this server).
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+    server_tokens off;
+    return 444;
+}
+
 server {
     listen 80;
     listen [::]:80;
