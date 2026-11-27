@@ -4,11 +4,12 @@ namespace App\Services\Unsubscribe;
 
 use App\Contracts\EmailProviderInterface;
 use App\Models\EmailSender;
+use App\Services\Providers\GmailSearch;
 use App\Services\Sync\MessageStore;
 
 /**
  * Archives or trashes every message from a sender at the provider (including
- * mail not imported yet) and mirrors the change locally.
+ * mail not imported yet, never starred mail) and mirrors the change locally.
  */
 class SenderMailCleaner
 {
@@ -32,7 +33,7 @@ class SenderMailCleaner
         [$add, $remove] = $cleanup === self::TRASH ? [['TRASH'], []] : [[], ['INBOX']];
         $account = $sender->account;
 
-        $ids = $this->provider->listAllMessageIds($account, 'from:'.$sender->email);
+        $ids = $this->provider->listAllMessageIds($account, GmailSearch::PROTECTED.' '.GmailSearch::from($sender->email));
         $this->provider->batchModify($account, $ids, $add, $remove);
         $this->store->applyLabelChange($account, $ids, $add, $remove);
     }

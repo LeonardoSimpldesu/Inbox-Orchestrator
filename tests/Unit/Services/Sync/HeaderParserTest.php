@@ -29,10 +29,19 @@ class HeaderParserTest extends TestCase
 
     public function test_sender_lowercases_and_takes_last_at_domain(): void
     {
-        $sender = HeaderParser::sender('Loja <"weird@local"@Shop.Example.COM>');
+        $sender = HeaderParser::sender('Loja <News+Promo@Shop.Example.COM>');
 
+        $this->assertSame('news+promo@shop.example.com', $sender?->email);
         $this->assertSame('shop.example.com', $sender?->domain);
         $this->assertSame('Loja', $sender?->name);
+    }
+
+    public function test_addresses_that_could_change_a_gmail_search_are_refused(): void
+    {
+        // The address ends up in from: searches; anyone can write the From header.
+        foreach (['<"weird@local"@shop.com>', '<a b@x.com>', '<{a@x.com in:inbox}>', '<a@x.com) (in:inbox>', '<a@x.com,b@y.com>', 'a@x.com; b'] as $from) {
+            $this->assertNull(HeaderParser::sender("Loja {$from}"), $from);
+        }
     }
 
     public function test_sender_without_address_returns_null(): void

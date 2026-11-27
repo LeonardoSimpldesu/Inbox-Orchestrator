@@ -177,7 +177,7 @@ class FakeEmailProvider implements EmailProviderInterface
     {
         preg_match('/after:(\\d+)/', $query, $after);
         preg_match('/before:(\\d+)/', $query, $before);
-        preg_match('/from:(\\S+)/', $query, $from);
+        preg_match('/from:"?([^"\\s]+)"?/', $query, $from);
 
         preg_match('/older_than:(\\d+)d/', $query, $olderThan);
         $notInInbox = str_contains($query, '-in:inbox');

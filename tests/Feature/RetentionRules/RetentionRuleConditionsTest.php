@@ -52,6 +52,8 @@ class RetentionRuleConditionsTest extends RetentionRulesTestCase
             [[['subject', 'a{b']], 'conditions.0.value'],
             [[['subject', 'a}b']], 'conditions.0.value'],
             [[['domain', 'x.com'], ['label', 'Label_99']], 'conditions.1.value'],
+            [[['sender', '"a b"@x.com']], 'conditions.0.value'],
+            [[['sender', 'a{b}@x.com']], 'conditions.0.value'],
         ];
 
         foreach ($cases as [$pairs, $field]) {

@@ -50,6 +50,7 @@ class ApplySenderLabelJobTest extends TestCase
 
         dispatch_sync(new ApplySenderLabelJob($sender->id, $sender->email_account_id, 'Label_new', 'Label_old'));
 
+        $this->assertSame('from:"a@banco.com"', $this->provider->listCalls[0]['query']);
         $this->assertEqualsCanonicalizing(['m1', 'm2'], $this->provider->modified[0]['ids']);
         $this->assertSame(['Label_new'], $this->provider->modified[0]['add']);
         $this->assertSame(['Label_old'], $this->provider->modified[0]['remove']);

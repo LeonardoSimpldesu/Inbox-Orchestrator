@@ -3,6 +3,7 @@
 namespace App\Services\Retention;
 
 use App\Models\RetentionRule;
+use App\Services\Providers\GmailSearch;
 use InvalidArgumentException;
 
 /**
@@ -12,7 +13,7 @@ use InvalidArgumentException;
 final readonly class RuleQuery
 {
     /** Mail a rule must never touch, whatever its filter. */
-    private const ALWAYS_EXCLUDED = '-is:starred -in:sent -in:drafts';
+    private const ALWAYS_EXCLUDED = GmailSearch::PROTECTED;
 
     /**
      * @param  list<string>  $labelIds
@@ -62,7 +63,7 @@ final readonly class RuleQuery
                 // Several categories are OR'ed in the search: labelIds would AND them.
                 'category' => self::group(array_map(fn (string $value) => 'category:'.self::categoryKey($value), $values)),
                 'domain' => self::group(array_map(fn (string $value) => 'from:@'.$value, $values)),
-                'sender' => self::group(array_map(fn (string $value) => 'from:'.$value, $values)),
+                'sender' => self::group(array_map(fn (string $value) => GmailSearch::from($value), $values)),
                 'subject' => count($values) === 1
                     ? 'subject:"'.$values[0].'"'
                     : 'subject:('.implode(' OR ', array_map(fn (string $value) => '"'.$value.'"', $values)).')',

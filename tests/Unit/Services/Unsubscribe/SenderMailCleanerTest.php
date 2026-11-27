@@ -55,11 +55,21 @@ class SenderMailCleanerTest extends TestCase
 
         $this->cleaner()->clean($sender, 'archive');
 
-        $this->assertSame('from:news@site.com', $this->provider->listCalls[0]['query']);
+        $this->assertSame('-is:starred -in:sent -in:drafts from:"news@site.com"', $this->provider->listCalls[0]['query']);
         $this->assertCount(1, $this->provider->modified);
         $this->assertEqualsCanonicalizing(['m0', 'm1', 'm2', 'm3', 'm4'], $this->provider->modified[0]['ids']);
         $this->assertSame([], $this->provider->modified[0]['add']);
         $this->assertSame(['INBOX'], $this->provider->modified[0]['remove']);
+    }
+
+    public function test_starred_mail_is_never_cleaned(): void
+    {
+        $sender = $this->seedSender(2, 2);
+        $this->provider->addMessages(FakeEmailProvider::message('starred', 'News <news@site.com>', CarbonImmutable::parse('2026-11-01'), ['labelIds' => ['INBOX', 'STARRED']]));
+
+        $this->cleaner()->clean($sender, 'trash');
+
+        $this->assertNotContains('starred', $this->provider->modified[0]['ids']);
     }
 
     public function test_trash_adds_trash_label(): void
