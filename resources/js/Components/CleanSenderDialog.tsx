@@ -51,6 +51,7 @@ export default function CleanSenderDialog({ ids, description, onClose, onDone }:
                         <input type="radio" name="cleanup" className={radio} checked={cleanup === 'trash'} onChange={() => setCleanup('trash')} />
                         Mandar para a lixeira (recuperáveis por 30 dias no Gmail)
                     </label>
+                    <p className="text-xs text-slate-500">E-mails com estrela nunca são tocados.</p>
                 </fieldset>
 
                 <label className="flex items-center gap-2 text-sm text-slate-200">

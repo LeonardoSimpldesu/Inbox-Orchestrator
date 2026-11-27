@@ -44,7 +44,8 @@ User management (no public registration): `php artisan user:create|user:disable|
 ### Authentication (Laravel Fortify, headless)
 - Fortify provides routes and logic; `app/Providers/FortifyServiceProvider.php` registers every Fortify view as an **Inertia page** (`Auth/*`), the rate limiters, and `Fortify::authenticateUsing` (rejects disabled users with the same generic error as a wrong password, before the 2FA challenge).
 - `config/fortify.php` enables **only** `resetPasswords` and `twoFactorAuthentication` (confirm + confirmPassword). Registration, email verification, profile/password update and passkeys are intentionally off; `tests/Feature/Auth/LoginTest` asserts those routes 404.
-- Anti-enumeration: login always fails with `Credenciais inválidas.`; `App\Http\Responses\PasswordResetLinkRequestedResponse` is bound to both the success and failure reset-link contracts so the endpoint always answers the same.
+- Anti-enumeration: login always fails with `Credenciais inválidas.` and hashes even for unknown/disabled users (same timing); `App\Http\Responses\PasswordResetLinkRequestedResponse` is bound to both the success and failure reset-link contracts so the endpoint always answers the same, and `ResetPasswordNotification` is queued (no timing difference) with links built from `APP_URL`.
+- `bootstrap/app.php` trusts only `APP_URL`'s exact host (`trustHosts`): nginx answers any Host header, and a forged one must never build links. Production `APP_URL` must be the real domain.
 - App routes (`routes/web.php`) use `['auth', 'auth.session', 'active']`: `auth.session` ends other sessions when the password changes; `active` (`EnsureUserIsActive`) logs out disabled users. `/settings/security` also requires `password.confirm`.
 - Disabling a user (`users.disabled_at`) = no login, no reset e-mail (`User::sendPasswordResetNotification`), sessions deleted and `remember_token` rotated (the remember-me cookie bypasses `authenticateUsing`).
 - 2FA secrets/recovery codes are hidden on `User`; the Security page fetches QR/secret/codes from Fortify's JSON endpoints on demand and never receives them as props.
@@ -68,7 +69,8 @@ Every query starts from the authenticated user: `User::emailAccounts()`, `sender
 
 ### Subscription Hub
 - `EmailSender::subscriptions()` (`pendingSubscriptions`/`handledSubscriptions`) defines what the Hub lists; `SubscriptionController` paginates from `$user->senders()` with a constant number of queries (tests compare 1 vs 150 rows).
-- Unsubscribe runs in `UnsubscribeSenderJob`: `OneClickUnsubscriber` (RFC 8058 POST, **SSRF guard**: https only, every resolved IP must be global, connection pinned with `CURLOPT_RESOLVE`, no redirects; resolver behind `HostResolver`), `MailtoUnsubscriber` (`MailtoParser` rejects CR/LF outside the body), then `SenderMailCleaner` (Gmail `from:` listing + `batchModify` in 1,000-id blocks + `MessageStore::applyLabelChange`).
+- Unsubscribe runs in `UnsubscribeSenderJob`: `OneClickUnsubscriber` (RFC 8058 POST, **SSRF guard**: https only, every resolved IP must be global, connection pinned with `CURLOPT_RESOLVE`, no redirects; resolver behind `HostResolver`), `MailtoUnsubscriber` (`MailtoParser` rejects CR/LF outside the body), then `SenderMailCleaner` (Gmail `from:` listing that skips `GmailSearch::PROTECTED` mail + `batchModify` in 1,000-id blocks + `MessageStore::applyLabelChange`). A sender has at most one `hub_block` rule (a new Hub rule updates it).
+- Sender addresses come from `From` headers anyone writes: `HeaderParser` refuses addresses matching `GmailSearch::UNSAFE_ADDRESS_PATTERN`, and every search builds them with `GmailSearch::from()` (quoted).
 - `unsubscribe_url`/`unsubscribe_mailto` never go into Inertia props or logs; the sender page is reached through `GET /subscriptions/{id}/page` (redirect in the user's browser). Logs carry `sender_id` + error code only.
 
 ### Retention rules (TTL)

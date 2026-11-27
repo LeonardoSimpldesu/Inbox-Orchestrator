@@ -19,8 +19,8 @@ Route::middleware(['auth', 'auth.session', 'active'])->group(function () {
     Route::get('/accounts', [EmailAccountController::class, 'index'])->name('accounts.index');
     Route::post('/accounts/google/redirect', [EmailAccountController::class, 'redirect'])->name('accounts.google.redirect');
     Route::get('/accounts/google/callback', [EmailAccountController::class, 'callback'])->name('accounts.google.callback');
-    Route::post('/accounts/sync', [EmailAccountController::class, 'syncAll'])->name('accounts.sync');
-    Route::post('/accounts/{account}/import-history', [EmailAccountController::class, 'importHistory'])->whereNumber('account')->name('accounts.import-history');
+    Route::post('/accounts/sync', [EmailAccountController::class, 'syncAll'])->middleware('throttle:30,1')->name('accounts.sync');
+    Route::post('/accounts/{account}/import-history', [EmailAccountController::class, 'importHistory'])->whereNumber('account')->middleware('throttle:30,1')->name('accounts.import-history');
     Route::delete('/accounts/{account}', [EmailAccountController::class, 'destroy'])->whereNumber('account')->name('accounts.destroy');
 
     Route::get('/subscriptions', [SubscriptionController::class, 'index'])->name('subscriptions.index');

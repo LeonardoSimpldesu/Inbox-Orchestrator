@@ -87,6 +87,19 @@ class SubscriptionActionsTest extends SubscriptionTestCase
         $this->assertSame('Arquivar e-mails de x@y.com', RetentionRule::latest('id')->first()->name);
     }
 
+    public function test_a_new_rule_for_a_blocked_sender_replaces_its_hub_block(): void
+    {
+        $sender = $this->subscription(['email' => 'promo@lojax.com', 'unsubscribe_url' => null, 'unsubscribe_one_click' => false, 'unsubscribe_mailto' => null, 'total_messages_promotional' => 3]);
+
+        $this->unsubscribe($sender, ['method' => 'rule', 'rule_action' => 'archive', 'cleanup' => 'keep']);
+        $this->unsubscribe($sender, ['method' => 'rule', 'rule_action' => 'trash', 'cleanup' => 'keep']);
+
+        // A second block would keep moving mail after the first one is deleted and the sender is released.
+        $rule = RetentionRule::sole();
+        $this->assertSame(['hub_block', 'trash', 'Mandar para a lixeira e-mails de '.$sender->name, true], [$rule->kind, $rule->action, $rule->name, $rule->is_active]);
+        $this->assertSame([['type' => 'sender', 'value' => 'promo@lojax.com']], $rule->conditions->map->only(['type', 'value'])->all());
+    }
+
     public function test_invalid_input_is_rejected(): void
     {
         $sender = $this->subscription();

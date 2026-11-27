@@ -144,8 +144,7 @@ class SubscriptionController extends Controller
     }
 
     /**
-     * Back to the Hub's pending list; a rule created for the sender is kept
-     * (it is managed on the rules page).
+     * Back to the Hub's pending list; the sender's Hub block rule is deleted.
      */
     public function reset(Request $request, string $sender): RedirectResponse
     {
@@ -207,15 +206,23 @@ class SubscriptionController extends Controller
     {
         $label = $sender->name ?? $sender->email;
 
-        $rule = RetentionRule::create([
-            'email_account_id' => $sender->email_account_id,
-            'kind' => 'hub_block',
+        // One block per sender: a second one would keep moving mail after the
+        // first is deleted and the sender goes back to pending.
+        $rule = RetentionRule::where('email_account_id', $sender->email_account_id)
+            ->where('kind', 'hub_block')
+            ->whereHas('conditions', fn (Builder $query) => $query->where('type', 'sender')->where('value', $sender->email))
+            ->first() ?? new RetentionRule(['email_account_id' => $sender->email_account_id, 'kind' => 'hub_block']);
+
+        $rule->fill([
             'name' => ($action === 'trash' ? 'Mandar para a lixeira e-mails de ' : 'Arquivar e-mails de ').$label,
             'retention_days' => 0,
             'action' => $action,
             'is_active' => true,
-        ]);
-        $rule->replaceConditions([['type' => 'sender', 'value' => $sender->email]]);
+        ])->save();
+
+        if ($rule->wasRecentlyCreated) {
+            $rule->replaceConditions([['type' => 'sender', 'value' => $sender->email]]);
+        }
 
         $sender->forceFill([
             'unsubscribe_status' => EmailSender::STATUS_BLOCKED,
