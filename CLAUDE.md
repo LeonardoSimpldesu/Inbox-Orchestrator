@@ -90,7 +90,8 @@ Inertia pages in `resources/js/Pages`, layouts `AppLayout` (authenticated) and `
 
 ### Security hardening (keep these intact)
 - Docker publishes ports on `127.0.0.1` only; `vite.config.js` restricts `server.fs.allow` to `resources/` and `node_modules/` (the dev server otherwise serves the SQLite DB, logs and source). Guarded by `tests/Security/EnvironmentHardeningTest` and `tests/js/vite-fs-exposure.test.mjs`.
-- `SecurityHeaders` middleware (Referrer-Policy, Permissions-Policy, HSTS only on HTTPS in production). `.env.production.example` is the hardened production template.
+- `SecurityHeaders` middleware (Referrer-Policy, Permissions-Policy, HSTS only on HTTPS in production, and a Content-Security-Policy whose `script-src` uses a per-response nonce via `Vite::useCspNonce()`; the Vite dev server is allowed only locally while `public/hot` exists; `frame-ancestors 'none'`). No inline scripts without the nonce. `.env.production.example` is the hardened production template.
+- Login is limited to 5/min per e-mail + IP and 20/hour per e-mail across IPs (an accepted lockout risk). nginx has default servers that refuse any other Host (444 / `ssl_reject_handshake`); template changes are applied on the VPS by hand (README "Atualizar a configuração do nginx").
 - `tests/Security/DependencyAuditTest` (group `audit`) fails on any `composer audit`/`npm audit` advisory not in `audit-allowlist.json`; entries need a reason and an expiry date, and production npm deps can never be allowlisted.
 
 ### Production (VPS)
