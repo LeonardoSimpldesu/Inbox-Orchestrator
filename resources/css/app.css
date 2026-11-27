@@ -3,6 +3,59 @@
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
 
+/* The app is dark only: native scrollbars and form controls follow it. */
+:root {
+    color-scheme: dark;
+}
+
 @theme {
     --font-sans: 'Figtree', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+}
+
+/*
+ * Below lg, tables marked .responsive-table become one card per row: no header,
+ * cells flow and wrap, data-label cells show their column name. Unlayered so it
+ * wins over the padding/width utilities the desktop table uses.
+ */
+@media (width < 64rem) {
+    .responsive-table,
+    .responsive-table tbody {
+        display: block;
+        min-width: 0;
+    }
+
+    .responsive-table thead {
+        display: none;
+    }
+
+    .responsive-table tr {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem 1rem;
+        padding: 1rem;
+    }
+
+    .responsive-table td {
+        display: block;
+        padding: 0;
+        text-align: left;
+    }
+
+    .responsive-table td[data-label]::before {
+        content: attr(data-label) ': ';
+        color: var(--color-slate-500);
+    }
+
+    .responsive-table td[data-primary] {
+        flex: 1 1 calc(100% - 3rem);
+        min-width: 0;
+        max-width: none;
+    }
+
+    .responsive-table td[data-full] {
+        flex-basis: 100%;
+        min-width: 0;
+        max-width: none;
+    }
 }

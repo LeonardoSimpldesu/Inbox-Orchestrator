@@ -160,13 +160,13 @@ export default function Dashboard({ accounts, stats, recentRules }: DashboardPro
                         ) : (
                             <div className="divide-y divide-slate-800">
                                 {accounts.map((acc) => (
-                                    <div key={acc.id} className="py-3 flex items-center justify-between">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-300">
+                                    <div key={acc.id} className="py-3 flex flex-wrap items-center justify-between gap-2">
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <div className="w-8 h-8 shrink-0 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-300">
                                                 {acc.provider === 'gmail' ? 'G' : 'O'}
                                             </div>
-                                            <div>
-                                                <div className="text-sm font-medium text-slate-200">{acc.account_email}</div>
+                                            <div className="min-w-0">
+                                                <div className="truncate text-sm font-medium text-slate-200">{acc.account_email}</div>
                                                 <div className="text-xs text-slate-500">Última sinc.: {acc.last_synced_at ? timeAgo(acc.last_synced_at) : 'nunca'}</div>
                                             </div>
                                         </div>

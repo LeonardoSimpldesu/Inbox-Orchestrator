@@ -141,7 +141,7 @@ export default function SubscriptionsIndex({ subscriptions, accounts, filters, c
                         placeholder="Buscar nome, e-mail ou domínio"
                         aria-label="Buscar remetente"
                         maxLength={100}
-                        className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-200 w-56"
+                        className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-200 w-full sm:w-56"
                     />
                     {tab('pending', 'Pendentes', counts.pending)}
                     {tab('handled', 'Tratados', counts.handled)}
@@ -168,6 +168,12 @@ export default function SubscriptionsIndex({ subscriptions, accounts, filters, c
                 </div>
             )}
 
+            {filters.status === 'pending' && subscriptions.data.length > 0 && (
+                <label className="lg:hidden mt-6 -mb-3 flex items-center gap-3 min-h-11 px-4 text-sm text-slate-300">
+                    <input type="checkbox" className="h-4 w-4 accent-indigo-500" checked={allChecked} onChange={() => setChecked(allChecked ? [] : selectable.map((row) => row.id))} />
+                    Selecionar todos da página
+                </label>
+            )}
             <div className="mt-6 bg-slate-900/40 border border-slate-800 rounded-2xl overflow-x-auto">
                 {subscriptions.data.length === 0 ? (
                     <div className="text-center py-12 px-4">
@@ -177,7 +183,7 @@ export default function SubscriptionsIndex({ subscriptions, accounts, filters, c
                         </p>
                     </div>
                 ) : (
-                    <table className="w-full min-w-[680px] text-sm">
+                    <table className="responsive-table w-full lg:min-w-[680px] text-sm">
                         <thead>
                             <tr className="text-left text-xs uppercase tracking-wider text-slate-500 border-b border-slate-800 whitespace-nowrap">
                                 {filters.status === 'pending' && (
@@ -213,7 +219,7 @@ export default function SubscriptionsIndex({ subscriptions, accounts, filters, c
                                             />
                                         </td>
                                     )}
-                                    <td className="px-4 py-3 max-w-[22rem]">
+                                    <td data-primary className="px-4 py-3 max-w-[22rem]">
                                         <div className="truncate font-medium text-slate-200">{row.name ?? row.email}</div>
                                         <div className="truncate text-xs text-slate-500">{row.email}</div>
                                         {filters.account === null && accounts.length > 1 && (
@@ -221,17 +227,17 @@ export default function SubscriptionsIndex({ subscriptions, accounts, filters, c
                                         )}
                                         <div className="mt-1"><StatusCell row={row} /></div>
                                     </td>
-                                    <td className="px-4 py-3 text-right text-slate-200">{row.total}</td>
-                                    <td className="px-4 py-3 text-right text-slate-200">{row.unread}</td>
-                                    <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">{row.last_received_at ? timeAgo(row.last_received_at) : '—'}</td>
-                                    <td className="px-4 py-3">
-                                        <div className="flex gap-2">
+                                    <td data-label="E-mails" className="px-4 py-3 text-right text-slate-200 max-lg:text-xs">{row.total}</td>
+                                    <td data-label="Não lidos" className="px-4 py-3 text-right text-slate-200 max-lg:text-xs">{row.unread}</td>
+                                    <td data-label="Último" className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">{row.last_received_at ? timeAgo(row.last_received_at) : '—'}</td>
+                                    <td data-full className="px-4 py-3">
+                                        <div className="flex flex-wrap gap-2">
                                             <a
                                                 href={row.gmail_url}
                                                 title="Abrir os e-mails deste remetente no Gmail"
                                                 target="_blank"
                                                 rel="noopener noreferrer"
-                                                className="inline-flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold px-3 py-2 rounded-lg border border-slate-700 transition whitespace-nowrap"
+                                                className="inline-flex items-center justify-center gap-1.5 max-lg:min-h-11 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold px-3 py-2 rounded-lg border border-slate-700 transition whitespace-nowrap"
                                             >
                                                 <ExternalLink className="w-3.5 h-3.5" />
                                                 Gmail
@@ -240,7 +246,7 @@ export default function SubscriptionsIndex({ subscriptions, accounts, filters, c
                                                 <button
                                                     type="button"
                                                     onClick={() => setSelected(row)}
-                                                    className="inline-flex items-center gap-1.5 bg-rose-600/90 hover:bg-rose-600 text-white text-xs font-semibold px-3 py-2 rounded-lg transition cursor-pointer whitespace-nowrap"
+                                                    className="inline-flex items-center justify-center gap-1.5 max-lg:min-h-11 bg-rose-600/90 hover:bg-rose-600 text-white text-xs font-semibold px-3 py-2 rounded-lg transition cursor-pointer whitespace-nowrap"
                                                 >
                                                     {availableMethods(row)[0] === 'rule' ? 'Criar regra' : 'Desinscrever'}
                                                 </button>
@@ -250,15 +256,14 @@ export default function SubscriptionsIndex({ subscriptions, accounts, filters, c
                                                     <button
                                                         type="button"
                                                         onClick={() => setSelected(row)}
-                                                        className="inline-flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold px-3 py-2 rounded-lg border border-slate-700 transition cursor-pointer whitespace-nowrap"
+                                                        className="inline-flex items-center justify-center gap-1.5 max-lg:min-h-11 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold px-3 py-2 rounded-lg border border-slate-700 transition cursor-pointer whitespace-nowrap"
                                                     >
                                                         Tentar de novo
                                                     </button>
                                                     <button
                                                         type="button"
                                                         onClick={() => router.post(`/subscriptions/${row.id}/reset`, {}, { preserveScroll: true })}
-                                                        title={row.status === 'blocked' ? 'A regra criada continua ativa na tela de Regras.' : undefined}
-                                                        className="inline-flex items-center gap-1.5 text-slate-300 hover:text-white text-xs font-semibold px-3 py-2 rounded-lg border border-slate-700 transition cursor-pointer whitespace-nowrap"
+                                                        className="inline-flex items-center justify-center gap-1.5 max-lg:min-h-11 text-slate-300 hover:text-white text-xs font-semibold px-3 py-2 rounded-lg border border-slate-700 transition cursor-pointer whitespace-nowrap"
                                                     >
                                                         Voltar para pendentes
                                                     </button>

@@ -21,7 +21,7 @@ function paginationLabel(label: string): string {
 }
 
 const control = 'rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-200';
-const smallButton = 'inline-flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold px-3 py-2 rounded-lg border border-slate-700 transition cursor-pointer whitespace-nowrap';
+const smallButton = 'inline-flex items-center justify-center gap-1.5 max-lg:min-h-11 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold px-3 py-2 rounded-lg border border-slate-700 transition cursor-pointer whitespace-nowrap';
 
 export default function SendersIndex({ senders, accounts, filters, labels }: SendersIndexProps) {
     const [labelsByAccount, setLabelsByAccount] = useState<Record<number, GmailLabel[]>>({});
@@ -118,7 +118,7 @@ export default function SendersIndex({ senders, accounts, filters, labels }: Sen
                             {labels.map((label) => <option key={label.id} value={label.id}>{label.name}</option>)}
                         </select>
                     )}
-                    <input type="search" aria-label="Buscar remetente" placeholder="Buscar nome, e-mail ou domínio" maxLength={100} className={`${control} w-56`} value={search} onChange={(e) => setSearch(e.target.value)} />
+                    <input type="search" aria-label="Buscar remetente" placeholder="Buscar nome, e-mail ou domínio" maxLength={100} className={`${control} w-full sm:w-56`} value={search} onChange={(e) => setSearch(e.target.value)} />
                     <label className="flex items-center gap-2 text-xs text-slate-300">
                         <input type="checkbox" className="h-4 w-4 accent-indigo-500" checked={filters.all} onChange={(e) => applyFilters({ all: e.target.checked })} />
                         Mostrar assinaturas
@@ -153,6 +153,12 @@ export default function SendersIndex({ senders, accounts, filters, labels }: Sen
                 </div>
             )}
 
+            {rows.length > 0 && (
+                <label className="lg:hidden mt-6 -mb-3 flex items-center gap-3 min-h-11 px-4 text-sm text-slate-300">
+                    <input type="checkbox" className="h-4 w-4 accent-indigo-500" checked={allChecked} onChange={() => setChecked(allChecked ? [] : rows.map((row) => row.id))} />
+                    Selecionar todos da página
+                </label>
+            )}
             <div className="mt-6 bg-slate-900/40 border border-slate-800 rounded-2xl overflow-x-auto">
                 {rows.length === 0 ? (
                     <div className="text-center py-12 px-4">
@@ -160,7 +166,7 @@ export default function SendersIndex({ senders, accounts, filters, labels }: Sen
                         <p className="text-sm text-slate-300">{filters.q || filters.category ? 'Nenhum remetente encontrado com esses filtros.' : 'Nenhum remetente ainda.'}</p>
                     </div>
                 ) : (
-                    <table className="w-full min-w-[720px] text-sm">
+                    <table className="responsive-table w-full lg:min-w-[720px] text-sm">
                         <thead>
                             <tr className="text-left text-xs uppercase tracking-wider text-slate-500 border-b border-slate-800 whitespace-nowrap">
                                 <th className="pl-4 py-3 w-8">
@@ -179,7 +185,7 @@ export default function SendersIndex({ senders, accounts, filters, labels }: Sen
                                     <td className="pl-4 py-3">
                                         <input type="checkbox" aria-label={`Selecionar ${row.email}`} className="h-4 w-4 accent-indigo-500" checked={checked.includes(row.id)} onChange={() => toggle(row.id)} />
                                     </td>
-                                    <td className="px-4 py-3 max-w-[22rem]">
+                                    <td data-primary className="px-4 py-3 max-w-[18rem] xl:max-w-[22rem]">
                                         <div className="flex items-center gap-2">
                                             <span className="truncate font-medium text-slate-200">{row.name ?? row.email}</span>
                                             {row.is_subscription && (
@@ -189,9 +195,9 @@ export default function SendersIndex({ senders, accounts, filters, labels }: Sen
                                         <div className="truncate text-xs text-slate-500">{row.email}</div>
                                         {filters.account === null && accounts.length > 1 && <div className="truncate text-xs text-slate-600">em {row.account_email}</div>}
                                     </td>
-                                    <td className="px-4 py-3 text-right text-slate-200">{row.total}</td>
-                                    <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">{row.last_received_at ? timeAgo(row.last_received_at) : '—'}</td>
-                                    <td className="px-4 py-3">
+                                    <td data-label="E-mails" className="px-4 py-3 text-right text-slate-200 max-lg:text-xs">{row.total}</td>
+                                    <td data-label="Último" className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">{row.last_received_at ? timeAgo(row.last_received_at) : '—'}</td>
+                                    <td data-full className="px-4 py-3">
                                         {row.applying ? (
                                             <span className="text-xs text-sky-300">Aplicando…</span>
                                         ) : (
@@ -206,8 +212,8 @@ export default function SendersIndex({ senders, accounts, filters, labels }: Sen
                                             />
                                         )}
                                     </td>
-                                    <td className="px-4 py-3">
-                                        <div className="flex gap-2">
+                                    <td data-full className="px-4 py-3">
+                                        <div className="flex flex-wrap gap-2">
                                             <a href={row.gmail_url} target="_blank" rel="noopener noreferrer" title="Abrir os e-mails deste remetente no Gmail" className={smallButton}>
                                                 <ExternalLink className="w-3.5 h-3.5" /> Gmail
                                             </a>

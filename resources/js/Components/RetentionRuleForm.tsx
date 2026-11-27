@@ -210,7 +210,7 @@ export default function RetentionRuleForm({ accounts, rule, onClose }: Retention
                         <>
                             <p className="text-xs text-slate-500">Todas as condições precisam valer. Repita um tipo para aceitar alternativas (ex.: dois assuntos = um ou outro).</p>
                             {form.data.conditions.map((condition, index) => (
-                                <div key={index} className="grid grid-cols-[1fr_auto] sm:grid-cols-[10rem_1fr_auto] gap-2 items-start">
+                                <div key={index} className="grid grid-cols-[1fr_auto] sm:grid-cols-[10rem_1fr_auto] gap-2 items-start rounded-lg border border-slate-800 p-2 sm:border-0 sm:p-0">
                                     <select
                                         className={`${input} col-span-2 sm:col-span-1`}
                                         aria-label={`Tipo da condição ${index + 1}`}
