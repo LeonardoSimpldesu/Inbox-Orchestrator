@@ -96,6 +96,27 @@ class LoginTest extends TestCase
         $this->assertGuest();
     }
 
+    public function test_one_e_mail_gets_at_most_20_attempts_an_hour_across_ips(): void
+    {
+        $this->user();
+
+        foreach (range(1, 20) as $attempt) {
+            $this->withServerVariables(['REMOTE_ADDR' => "203.0.113.{$attempt}"])
+                ->post('/login', ['email' => 'user@example.com', 'password' => 'wrong-password'])
+                ->assertSessionHasErrors('email');
+        }
+
+        $this->withServerVariables(['REMOTE_ADDR' => '198.51.100.1'])
+            ->post('/login', ['email' => 'user@example.com', 'password' => 'password'])
+            ->assertStatus(429);
+        $this->assertGuest();
+
+        $this->travel(61)->minutes();
+        $this->withServerVariables(['REMOTE_ADDR' => '198.51.100.1'])
+            ->post('/login', ['email' => 'user@example.com', 'password' => 'password']);
+        $this->assertAuthenticated();
+    }
+
     public function test_remember_me_sets_recaller_cookie(): void
     {
         $this->user();

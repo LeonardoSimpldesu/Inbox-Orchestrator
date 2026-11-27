@@ -91,9 +91,14 @@ class FortifyServiceProvider extends ServiceProvider
     private function registerRateLimiters(): void
     {
         RateLimiter::for('login', function (Request $request) {
-            $throttleKey = Str::transliterate(Str::lower(trim((string) $request->input(Fortify::username()))).'|'.$request->ip());
+            $email = Str::transliterate(Str::lower(trim((string) $request->input(Fortify::username()))));
 
-            return Limit::perMinute(5)->by($throttleKey);
+            // The hourly cap per e-mail stops guessing spread over many IPs; the
+            // accepted cost is that anyone knowing an e-mail can lock it for an hour.
+            return [
+                Limit::perMinute(5)->by($email.'|'.$request->ip()),
+                Limit::perHour(20)->by('login-email|'.$email),
+            ];
         });
 
         RateLimiter::for('two-factor', function (Request $request) {
