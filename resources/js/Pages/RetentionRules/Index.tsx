@@ -6,7 +6,7 @@ import AppLayout from '@/Layouts/AppLayout';
 import PrimaryButton from '@/Components/PrimaryButton';
 import RetentionRuleForm from '@/Components/RetentionRuleForm';
 import SimulationPanel from '@/Components/SimulationPanel';
-import { describeAction, describeFilter, ruleErrorLabel } from '@/lib/rules';
+import { describeAction, describeConditions, ruleErrorLabel } from '@/lib/rules';
 import { formatDate, timeAgo } from '@/lib/gmail';
 
 interface RetentionRulesIndexProps {
@@ -101,7 +101,7 @@ export default function RetentionRulesIndex({ rules, accounts, simulation }: Ret
                                                 </button>
                                             </div>
                                         </td>
-                                        <td className="px-4 py-3 text-xs text-slate-300">{describeFilter(rule)}</td>
+                                        <td className="px-4 py-3 text-xs text-slate-300">{describeConditions(rule.conditions)}</td>
                                         <td className="px-4 py-3 text-right text-slate-200">{rule.retention_days}</td>
                                         <td className="px-4 py-3 text-xs text-slate-300">{describeAction(rule)}</td>
                                         <td className="px-4 py-3 text-xs whitespace-nowrap">

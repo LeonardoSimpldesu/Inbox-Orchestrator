@@ -1,4 +1,4 @@
-import type { RetentionRuleRow, RuleAction, RuleFilterType } from '@/types';
+import type { RetentionRuleRow, RuleAction, RuleCondition, RuleConditionType, RuleKind } from '@/types';
 
 export const CATEGORY_LABELS: Record<string, string> = {
     promotions: 'Promoções',
@@ -7,11 +7,19 @@ export const CATEGORY_LABELS: Record<string, string> = {
     forums: 'Fóruns',
 };
 
-export const FILTER_TYPE_LABELS: Record<RuleFilterType, string> = {
+/** Same order as the backend's CONDITION_TYPES. */
+export const CONDITION_TYPE_LABELS: Record<RuleConditionType, string> = {
     category: 'Categoria',
+    label: 'Marcador',
     domain: 'Domínio',
     sender: 'Remetente',
-    label: 'Marcador',
+    subject: 'Assunto',
+};
+
+export const MANAGED_BY: Partial<Record<RuleKind, string>> = {
+    sender_category: 'Gerenciada pela página Remetentes',
+    sender_cleanup: 'Gerenciada pela página Remetentes',
+    hub_block: 'Gerenciada pelo Hub',
 };
 
 export const ACTION_LABELS: Record<RuleAction, string> = {
@@ -32,17 +40,26 @@ export function ruleErrorLabel(code: string): string {
     return RULE_ERROR_LABELS[code] ?? (code.startsWith('http_') ? `o Gmail respondeu com erro ${code.slice(5)}` : code);
 }
 
-export function describeFilter(rule: Pick<RetentionRuleRow, 'filter_type' | 'filter_value' | 'filter_label'>): string {
-    switch (rule.filter_type) {
+function conditionText(condition: RuleCondition): string {
+    switch (condition.type) {
         case 'category':
-            return `Categoria: ${CATEGORY_LABELS[rule.filter_value] ?? rule.filter_value}`;
+            return CATEGORY_LABELS[condition.value] ?? condition.value;
         case 'label':
-            return `Marcador: ${rule.filter_label ?? rule.filter_value}`;
-        case 'domain':
-            return `Domínio: ${rule.filter_value}`;
+            return condition.label ?? condition.value;
+        case 'subject':
+            return `"${condition.value}"`;
         default:
-            return `Remetente: ${rule.filter_value}`;
+            return condition.value;
     }
+}
+
+/** Types are all required (·); values of one type are alternatives (ou). */
+export function describeConditions(conditions: RuleCondition[]): string {
+    return (Object.keys(CONDITION_TYPE_LABELS) as RuleConditionType[])
+        .map((type) => ({ type, group: conditions.filter((condition) => condition.type === type) }))
+        .filter(({ group }) => group.length > 0)
+        .map(({ type, group }) => `${CONDITION_TYPE_LABELS[type]}: ${group.map(conditionText).join(' ou ')}`)
+        .join(' · ');
 }
 
 export function describeAction(rule: Pick<RetentionRuleRow, 'action' | 'target_label_name' | 'target_label' | 'archive_after_label'>): string {
