@@ -58,8 +58,6 @@ class SenderCategories
                 'email_account_id' => $account->id,
                 'kind' => 'sender_category',
                 'name' => Str::limit('Categoria '.$labelName.': '.($sender->name ?? $sender->email), 100, ''),
-                'filter_type' => 'sender',
-                'filter_value' => $sender->email,
                 'retention_days' => 0,
                 'action' => 'add_label',
                 'target_label' => $labelId,

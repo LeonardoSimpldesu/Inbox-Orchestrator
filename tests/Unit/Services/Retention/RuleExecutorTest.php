@@ -42,7 +42,7 @@ class RuleExecutorTest extends RetentionTestCase
         $this->assertSame(['INBOX'], $this->provider->modified[0]['remove']);
         $this->assertContains('Label_1', EmailMessageMeta::first()->labels);
 
-        $this->executor()->execute($this->rule(['filter_type' => 'domain', 'filter_value' => 'loja.com', 'retention_days' => 0, 'action' => 'trash']));
+        $this->executor()->execute($this->rule(['retention_days' => 0, 'action' => 'trash'], conditions: [['domain', 'loja.com']]));
         $this->assertSame(['TRASH'], $this->provider->modified[1]['add']);
         $this->assertSame(2, EmailMessageMeta::where('is_deleted', true)->count());
     }
@@ -85,7 +85,7 @@ class RuleExecutorTest extends RetentionTestCase
     public function test_deleted_filter_label_pauses_rule(): void
     {
         $this->provider->labels = [['id' => 'Label_1', 'name' => 'Lojas']];
-        $rule = $this->rule(['filter_type' => 'label', 'filter_value' => 'Label_gone']);
+        $rule = $this->rule([], conditions: [['label', 'Label_gone']]);
 
         $this->assertSame(0, $this->executor()->execute($rule));
 

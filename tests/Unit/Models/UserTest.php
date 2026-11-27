@@ -23,11 +23,9 @@ class UserTest extends TestCase
                 'refresh_token' => 'r',
             ]);
             EmailSender::create(['email_account_id' => $account->id, 'email' => "s{$user->id}@x.com", 'domain' => 'x.com']);
-            RetentionRule::create([
+            RetentionRule::factory()->withConditions([['domain', 'x.com']])->create([
                 'email_account_id' => $account->id,
                 'name' => "Regra {$user->id}",
-                'filter_type' => 'domain',
-                'filter_value' => 'x.com',
                 'retention_days' => 7,
                 'action' => 'trash',
             ]);

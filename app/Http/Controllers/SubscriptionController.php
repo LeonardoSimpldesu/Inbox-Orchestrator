@@ -211,8 +211,6 @@ class SubscriptionController extends Controller
             'email_account_id' => $sender->email_account_id,
             'kind' => 'hub_block',
             'name' => ($action === 'trash' ? 'Mandar para a lixeira e-mails de ' : 'Arquivar e-mails de ').$label,
-            'filter_type' => 'sender',
-            'filter_value' => $sender->email,
             'retention_days' => 0,
             'action' => $action,
             'is_active' => true,

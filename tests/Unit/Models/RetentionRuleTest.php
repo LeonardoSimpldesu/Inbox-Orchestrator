@@ -23,11 +23,9 @@ class RetentionRuleTest extends TestCase
             'refresh_token' => 'tok_r',
         ]);
 
-        $rule = RetentionRule::create([
+        $rule = RetentionRule::factory()->withConditions([['category', 'CATEGORY_UPDATES']])->create([
             'email_account_id' => $account->id,
             'name' => 'Archive old updates',
-            'filter_type' => 'category',
-            'filter_value' => 'CATEGORY_UPDATES',
             'retention_days' => 30,
             'action' => 'archive',
         ]);
@@ -51,8 +49,6 @@ class RetentionRuleTest extends TestCase
         return RetentionRule::create(array_merge([
             'email_account_id' => EmailAccount::factory()->create()->id,
             'name' => 'Promoções em 15 dias',
-            'filter_type' => 'category',
-            'filter_value' => 'promotions',
             'retention_days' => 15,
             'action' => 'archive',
         ], $attributes));
@@ -85,7 +81,6 @@ class RetentionRuleTest extends TestCase
             'social' => 'CATEGORY_SOCIAL',
             'forums' => 'CATEGORY_FORUMS',
         ], RetentionRule::CATEGORIES);
-        $this->assertSame(['category', 'domain', 'sender', 'label'], RetentionRule::FILTER_TYPES);
         $this->assertSame(['archive', 'trash', 'add_label'], RetentionRule::ACTIONS);
     }
 
@@ -134,7 +129,7 @@ class RetentionRuleTest extends TestCase
     {
         $account = EmailAccount::factory()->create();
         $row = fn (int $i) => [
-            'email_account_id' => $account->id, 'name' => "Regra {$i}", 'kind' => 'sender_cleanup', 'filter_type' => 'sender', 'filter_value' => 'x',
+            'email_account_id' => $account->id, 'name' => "Regra {$i}", 'kind' => 'sender_cleanup',
             'retention_days' => 0, 'action' => 'trash', 'created_at' => now(), 'updated_at' => now(),
         ];
         // An older rule of the same kind must keep its own conditions.

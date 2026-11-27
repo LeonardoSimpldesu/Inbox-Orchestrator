@@ -186,11 +186,11 @@ class SubscriptionActionsTest extends SubscriptionTestCase
             'unsubscribe_status' => 'blocked', 'unsubscribe_method' => 'rule',
             'unsubscribe_requested_at' => now(), 'unsubscribe_error' => 'cleanup_rate_limited',
         ]);
-        $block = fn (string $email, $account) => RetentionRule::factory()->withConditions([['sender', $email]])->create(['email_account_id' => $account->id, 'kind' => 'hub_block', 'filter_type' => 'sender', 'filter_value' => $email, 'retention_days' => 0, 'action' => 'archive', 'is_active' => true]);
+        $block = fn (string $email, $account) => RetentionRule::factory()->withConditions([['sender', $email]])->create(['email_account_id' => $account->id, 'kind' => 'hub_block', 'retention_days' => 0, 'action' => 'archive', 'is_active' => true]);
         $rule = $block($sender->email, $this->account);
         $otherSender = $block('other@x.com', $this->account);
         $otherAccount = $block($sender->email, EmailAccount::factory()->for($this->user)->create());
-        $manual = RetentionRule::factory()->withConditions([['sender', $sender->email]])->create(['email_account_id' => $this->account->id, 'filter_type' => 'sender', 'filter_value' => $sender->email, 'action' => 'trash']);
+        $manual = RetentionRule::factory()->withConditions([['sender', $sender->email]])->create(['email_account_id' => $this->account->id, 'action' => 'trash']);
 
         $this->actingAs($this->user)->from('/subscriptions?status=handled')->post("/subscriptions/{$sender->id}/reset")
             ->assertRedirect('/subscriptions?status=handled')

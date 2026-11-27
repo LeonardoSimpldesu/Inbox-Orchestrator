@@ -108,7 +108,7 @@ class UserLifecycleCommandsTest extends TestCase
             'labels' => ['INBOX'],
             'received_at' => now(),
         ]);
-        RetentionRule::create(['email_account_id' => $account->id, 'name' => 'R', 'filter_type' => 'domain', 'filter_value' => 'x.com', 'retention_days' => 7, 'action' => 'trash']);
+        RetentionRule::factory()->withConditions([['domain', 'x.com']])->create(['email_account_id' => $account->id, 'name' => 'R', 'retention_days' => 7, 'action' => 'trash']);
 
         $this->artisan('user:delete', ['email' => 'user@example.com'])
             ->expectsQuestion('Para confirmar, digite o e-mail do usuário', 'User@Example.com')

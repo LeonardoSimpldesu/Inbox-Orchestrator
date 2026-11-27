@@ -38,11 +38,9 @@ class DashboardTest extends TestCase
 
     private function ruleFor(EmailAccount $account, string $name): RetentionRule
     {
-        return RetentionRule::create([
+        return RetentionRule::factory()->withConditions([['category', 'CATEGORY_PROMOTIONS']])->create([
             'email_account_id' => $account->id,
             'name' => $name,
-            'filter_type' => 'category',
-            'filter_value' => 'CATEGORY_PROMOTIONS',
             'retention_days' => 15,
             'action' => 'archive',
             'is_active' => true,

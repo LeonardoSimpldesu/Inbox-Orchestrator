@@ -47,6 +47,6 @@ abstract class SendersTestCase extends TestCase
 
     protected function categorize(EmailSender $sender, string $label): RetentionRule
     {
-        return RetentionRule::factory()->withConditions([['sender', $sender->email]])->create(['email_account_id' => $sender->email_account_id, 'filter_type' => 'sender', 'filter_value' => $sender->email, 'kind' => 'sender_category', 'name' => 'c', 'retention_days' => 0, 'action' => 'add_label', 'target_label' => $label, 'is_active' => true]);
+        return RetentionRule::factory()->withConditions([['sender', $sender->email]])->create(['email_account_id' => $sender->email_account_id, 'kind' => 'sender_category', 'name' => 'c', 'retention_days' => 0, 'action' => 'add_label', 'target_label' => $label, 'is_active' => true]);
     }
 }

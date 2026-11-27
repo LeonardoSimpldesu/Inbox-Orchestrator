@@ -208,8 +208,6 @@ class SenderController extends Controller
                 'email_account_id' => $sender->email_account_id,
                 'kind' => 'sender_cleanup',
                 'name' => Str::limit(($action === 'trash' ? 'Mandar para a lixeira e-mails de ' : 'Arquivar e-mails de ').($sender->name ?? $sender->email), 100, ''),
-                'filter_type' => 'sender',
-                'filter_value' => $sender->email,
                 'retention_days' => 0,
                 'action' => $action,
                 'archive_after_label' => false,
