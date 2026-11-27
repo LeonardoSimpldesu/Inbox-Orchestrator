@@ -159,4 +159,22 @@ class RetentionRuleTest extends TestCase
         }
         $this->assertSame(52, RetentionRule::count());
     }
+
+    public function test_insert_with_conditions_refuses_to_guess_when_an_older_rule_has_no_conditions(): void
+    {
+        $account = EmailAccount::factory()->create();
+        $orphan = RetentionRule::create(['email_account_id' => $account->id, 'name' => 'Sem condições', 'kind' => 'sender_cleanup', 'retention_days' => 0, 'action' => 'trash']);
+
+        try {
+            RetentionRule::insertWithConditions(
+                [['email_account_id' => $account->id, 'name' => 'Nova', 'kind' => 'sender_cleanup', 'retention_days' => 0, 'action' => 'trash']],
+                [[['type' => 'sender', 'value' => 'a@x.com']]],
+            );
+            $this->fail('Expected a LogicException.');
+        } catch (\LogicException) {
+        }
+
+        $this->assertSame([$orphan->id], RetentionRule::pluck('id')->all());
+        $this->assertSame(0, DB::table('retention_rule_conditions')->count());
+    }
 }

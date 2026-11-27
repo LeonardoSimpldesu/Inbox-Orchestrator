@@ -103,6 +103,11 @@ class RetentionRule extends Model
                 ->orderBy('id')
                 ->pluck('id');
 
+            if ($ids->count() !== count($rules)) {
+                // An older rule without conditions would shift the pairing: roll back instead.
+                throw new \LogicException('Could not pair inserted rules with their conditions.');
+            }
+
             $now = now();
             RetentionRuleCondition::insert(collect($conditions)->flatMap(fn (array $list, int $i) => array_map(
                 fn (array $condition) => [...$condition, 'retention_rule_id' => $ids[$i], 'created_at' => $now, 'updated_at' => $now],
