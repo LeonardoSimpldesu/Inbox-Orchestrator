@@ -15,7 +15,7 @@ interface RetentionRulesIndexProps {
     simulation: RuleSimulation | null;
 }
 
-const button = 'inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-700 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50';
+const button = 'inline-flex items-center justify-center gap-1.5 max-lg:min-h-11 max-lg:min-w-11 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-700 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50';
 
 function lastRun(rule: RetentionRuleRow): string {
     const run = rule.logs.find((log) => log.status !== 'simulated');
@@ -67,7 +67,7 @@ export default function RetentionRulesIndex({ rules, accounts, simulation }: Ret
                         <p className="text-xs text-slate-500 mt-1">Exemplo: e-mails da categoria Promoções com mais de 15 dias devem ser arquivados.</p>
                     </div>
                 ) : (
-                    <table className="w-full min-w-[820px] text-sm">
+                    <table className="responsive-table w-full lg:min-w-[820px] text-sm">
                         <thead>
                             <tr className="text-left text-xs uppercase tracking-wider text-slate-500 border-b border-slate-800 whitespace-nowrap">
                                 <th className="px-4 py-3 font-medium">Regra</th>
@@ -82,8 +82,8 @@ export default function RetentionRulesIndex({ rules, accounts, simulation }: Ret
                             {rules.map((rule) => (
                                 <Fragment key={rule.id}>
                                     <tr className="align-top">
-                                        <td className="px-4 py-3 max-w-[16rem]">
-                                            <div className="truncate font-medium text-slate-200" title={rule.name}>{rule.name}</div>
+                                        <td data-full className="px-4 py-3 max-w-[16rem]">
+                                            <div className="break-words lg:truncate font-medium text-slate-200" title={rule.name}>{rule.name}</div>
                                             {accounts.length > 1 && <div className="truncate text-xs text-slate-500">{rule.account_email}</div>}
                                             <div className="mt-2 flex flex-wrap gap-1.5">
                                                 <button type="button" className={button} onClick={() => post(`/retention-rules/${rule.id}/simulate`)}>Simular</button>
@@ -101,17 +101,17 @@ export default function RetentionRulesIndex({ rules, accounts, simulation }: Ret
                                                 </button>
                                             </div>
                                         </td>
-                                        <td className="px-4 py-3 text-xs text-slate-300">{describeConditions(rule.conditions)}</td>
-                                        <td className="px-4 py-3 text-right text-slate-200">{rule.retention_days}</td>
-                                        <td className="px-4 py-3 text-xs text-slate-300">{describeAction(rule)}</td>
+                                        <td data-full className="px-4 py-3 text-xs text-slate-300 break-words">{describeConditions(rule.conditions)}</td>
+                                        <td data-label="Dias" className="px-4 py-3 text-right text-slate-200 max-lg:text-xs">{rule.retention_days}</td>
+                                        <td data-label="Ação" className="px-4 py-3 text-xs text-slate-300">{describeAction(rule)}</td>
                                         <td className="px-4 py-3 text-xs whitespace-nowrap">
                                             {rule.is_active ? <span className="text-emerald-300">● Ativa</span> : <span className="text-slate-400">⏸ Pausada</span>}
                                         </td>
-                                        <td className="px-4 py-3 text-xs text-slate-400">{lastRun(rule)}</td>
+                                        <td data-label="Última execução" className="px-4 py-3 text-xs text-slate-400">{lastRun(rule)}</td>
                                     </tr>
                                     {expanded === rule.id && (
                                         <tr>
-                                            <td colSpan={6} className="px-4 pb-4">
+                                            <td data-full colSpan={6} className="px-4 pb-4">
                                                 {rule.logs.length === 0 ? (
                                                     <p className="text-xs text-slate-500">Sem execuções ainda.</p>
                                                 ) : (
