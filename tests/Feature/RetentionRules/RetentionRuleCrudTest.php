@@ -31,7 +31,9 @@ class RetentionRuleCrudTest extends RetentionRulesTestCase
             ->has('rules', 1)
             ->where('rules.0.id', $rule->id)
             ->where('rules.0.account_email', 'me@gmail.com')
-            ->where('rules.0.filter_label', 'Notas Fiscais')
+            ->where('rules.0.kind', 'manual')
+            ->where('rules.0.conditions', [['type' => 'label', 'value' => 'Label_2', 'label' => 'Notas Fiscais']])
+            ->missing('rules.0.filter_type')
             ->where('rules.0.target_label_name', 'Banco')
             ->where('rules.0.can_activate', false)
             ->has('rules.0.logs', 10)
@@ -62,21 +64,22 @@ class RetentionRuleCrudTest extends RetentionRulesTestCase
         $this->provider->failNext['listLabels'] = new ProviderUnavailable('rate_limited');
 
         $this->actingAs($this->user)->get('/retention-rules')->assertOk()->assertInertia(fn (Assert $page) => $page
-            ->where('rules.0.filter_label', 'Label_2')
+            ->where('rules.0.conditions.0.label', null)
             ->where('rules.0.target_label_name', null)
         );
     }
 
     public function test_create_rule_starts_paused(): void
     {
-        $this->actingAs($this->user)->from('/retention-rules')->post('/retention-rules', $this->payload(['filter_type' => 'domain', 'filter_value' => ' Amazon.COM.br ']))
+        $this->actingAs($this->user)->from('/retention-rules')->post('/retention-rules', $this->payload(['conditions' => [['type' => 'domain', 'value' => ' Amazon.COM.br ']]]))
             ->assertRedirect('/retention-rules')
             ->assertSessionHas('success', 'Regra criada.');
 
         $rule = RetentionRule::sole();
         $this->assertFalse($rule->is_active);
         $this->assertNull($rule->simulated_at);
-        $this->assertSame('amazon.com.br', $rule->filter_value);
+        $this->assertSame([['type' => 'domain', 'value' => 'amazon.com.br']], $rule->conditions->map->only(['type', 'value'])->all());
+        $this->assertSame('manual', $rule->kind);
     }
 
     public function test_create_and_simulate(): void
@@ -94,10 +97,10 @@ class RetentionRuleCrudTest extends RetentionRulesTestCase
             [['retention_days' => 3651], 'retention_days'],
             [['name' => ''], 'name'],
             [['name' => str_repeat('a', 101)], 'name'],
-            [['filter_type' => 'query'], 'filter_type'],
-            [['filter_value' => 'primary'], 'filter_value'],
-            [['filter_type' => 'domain', 'filter_value' => 'not a domain'], 'filter_value'],
-            [['filter_type' => 'sender', 'filter_value' => 'nobody'], 'filter_value'],
+            [['conditions' => [['type' => 'query', 'value' => 'x']]], 'conditions.0.type'],
+            [['conditions' => [['type' => 'category', 'value' => 'primary']]], 'conditions.0.value'],
+            [['conditions' => [['type' => 'domain', 'value' => 'not a domain']]], 'conditions.0.value'],
+            [['conditions' => [['type' => 'sender', 'value' => 'nobody']]], 'conditions.0.value'],
             [['action' => 'delete'], 'action'],
             [['action' => 'add_label', 'target_label' => null], 'target_label'],
         ];
@@ -111,8 +114,8 @@ class RetentionRuleCrudTest extends RetentionRulesTestCase
 
     public function test_label_must_belong_to_account(): void
     {
-        $this->actingAs($this->user)->post('/retention-rules', $this->payload(['filter_type' => 'label', 'filter_value' => 'Label_99']))
-            ->assertSessionHasErrors('filter_value');
+        $this->actingAs($this->user)->post('/retention-rules', $this->payload(['conditions' => [['type' => 'label', 'value' => 'Label_99']]]))
+            ->assertSessionHasErrors('conditions.0.value');
         $this->actingAs($this->user)->post('/retention-rules', $this->payload(['action' => 'add_label', 'target_label' => 'Label_99']))
             ->assertSessionHasErrors('target_label');
 
@@ -120,7 +123,7 @@ class RetentionRuleCrudTest extends RetentionRulesTestCase
         $this->actingAs($this->user)->post('/retention-rules', $this->payload(['email_account_id' => $foreign->id]))
             ->assertSessionHasErrors('email_account_id');
 
-        $this->actingAs($this->user)->post('/retention-rules', $this->payload(['filter_type' => 'label', 'filter_value' => 'Label_1', 'action' => 'add_label', 'target_label' => 'Label_2']))
+        $this->actingAs($this->user)->post('/retention-rules', $this->payload(['conditions' => [['type' => 'label', 'value' => 'Label_1']], 'action' => 'add_label', 'target_label' => 'Label_2']))
             ->assertSessionHasNoErrors();
     }
 
@@ -128,8 +131,8 @@ class RetentionRuleCrudTest extends RetentionRulesTestCase
     {
         $this->provider->failNext['listLabels'] = new ProviderUnavailable('rate_limited');
 
-        $this->actingAs($this->user)->post('/retention-rules', $this->payload(['filter_type' => 'label', 'filter_value' => 'Label_1']))
-            ->assertSessionHasErrors(['filter_value' => 'Não foi possível carregar os marcadores do Gmail. Tente de novo.']);
+        $this->actingAs($this->user)->post('/retention-rules', $this->payload(['conditions' => [['type' => 'label', 'value' => 'Label_1']]]))
+            ->assertSessionHasErrors(['conditions.0.value' => 'Não foi possível carregar os marcadores do Gmail. Tente de novo.']);
     }
 
     public function test_editing_pauses_and_requires_new_simulation(): void
@@ -192,10 +195,10 @@ class RetentionRuleCrudTest extends RetentionRulesTestCase
         $sender = EmailSender::create(['email_account_id' => $this->account->id, 'email' => 'news@x.com', 'domain' => 'x.com', 'unsubscribe_status' => 'blocked', 'unsubscribe_method' => 'rule']);
         $rule = $this->rule(['filter_type' => 'sender', 'filter_value' => 'news@x.com', 'retention_days' => 0, 'is_active' => true]);
 
-        $this->actingAs($this->user)->put("/retention-rules/{$rule->id}", $this->payload(['filter_type' => 'sender', 'filter_value' => 'news@x.com', 'retention_days' => 7]));
+        $this->actingAs($this->user)->put("/retention-rules/{$rule->id}", $this->payload(['conditions' => [['type' => 'sender', 'value' => 'news@x.com']], 'retention_days' => 7]));
         $this->assertSame('blocked', $sender->fresh()->unsubscribe_status);
 
-        $this->actingAs($this->user)->put("/retention-rules/{$rule->id}", $this->payload(['filter_type' => 'domain', 'filter_value' => 'x.com']));
+        $this->actingAs($this->user)->put("/retention-rules/{$rule->id}", $this->payload(['conditions' => [['type' => 'domain', 'value' => 'x.com']]]));
         $this->assertSame('none', $sender->fresh()->unsubscribe_status);
     }
 
@@ -233,7 +236,7 @@ class RetentionRuleCrudTest extends RetentionRulesTestCase
 
     public function test_rule_for_all_accounts_cannot_use_labels(): void
     {
-        $this->actingAs($this->user)->post('/retention-rules', $this->payload(['email_account_id' => 'all', 'filter_type' => 'label', 'filter_value' => 'Label_1']))
+        $this->actingAs($this->user)->post('/retention-rules', $this->payload(['email_account_id' => 'all', 'conditions' => [['type' => 'label', 'value' => 'Label_1']]]))
             ->assertSessionHasErrors(['email_account_id' => 'Marcadores são de cada conta: escolha uma conta para usar marcadores.']);
         $this->actingAs($this->user)->post('/retention-rules', $this->payload(['email_account_id' => 'all', 'action' => 'add_label', 'target_label' => 'Label_1']))
             ->assertSessionHasErrors('email_account_id');

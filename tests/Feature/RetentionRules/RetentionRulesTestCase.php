@@ -53,8 +53,7 @@ abstract class RetentionRulesTestCase extends TestCase
         return array_merge([
             'email_account_id' => $this->account->id,
             'name' => 'Promoções em 15 dias',
-            'filter_type' => 'category',
-            'filter_value' => 'promotions',
+            'conditions' => [['type' => 'category', 'value' => 'promotions']],
             'retention_days' => 15,
             'action' => 'archive',
             'target_label' => null,

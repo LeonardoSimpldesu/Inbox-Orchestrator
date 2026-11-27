@@ -24,13 +24,11 @@ class DashboardController extends Controller
                 ->get([
                     'retention_rules.id',
                     'retention_rules.name',
-                    'retention_rules.filter_type',
-                    'retention_rules.filter_value',
                     'retention_rules.retention_days',
                     'retention_rules.action',
                     'retention_rules.is_active',
                 ])
-                ->map(fn (RetentionRule $rule) => $rule->only(['id', 'name', 'filter_type', 'filter_value', 'retention_days', 'action', 'is_active'])),
+                ->map(fn (RetentionRule $rule) => $rule->only(['id', 'name', 'retention_days', 'action', 'is_active'])),
         ]);
     }
 }

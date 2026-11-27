@@ -11,11 +11,13 @@ use App\Jobs\ExecuteRetentionRuleJob;
 use App\Models\EmailAccount;
 use App\Models\EmailSender;
 use App\Models\RetentionRule;
+use App\Models\RetentionRuleCondition;
 use App\Models\RuleExecutionLog;
 use App\Services\Retention\RuleSimulator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -32,7 +34,7 @@ class RetentionRuleController extends Controller
         $accounts = $request->user()->emailAccounts()->orderBy('account_email')->get();
 
         $rules = RetentionRule::whereIn('email_account_id', $accounts->modelKeys())
-            ->with(['executionLogs' => fn ($query) => $query->latest('executed_at')->latest('id')->limit(self::HISTORY_SIZE)])
+            ->with(['conditions', 'executionLogs' => fn ($query) => $query->latest('executed_at')->latest('id')->limit(self::HISTORY_SIZE)])
             ->orderBy('email_account_id')
             ->orderBy('name')
             ->get();
@@ -45,9 +47,12 @@ class RetentionRuleController extends Controller
                 'name' => $rule->name,
                 'email_account_id' => $rule->email_account_id,
                 'account_email' => $accounts->find($rule->email_account_id)->account_email,
-                'filter_type' => $rule->filter_type,
-                'filter_value' => $rule->filter_value,
-                'filter_label' => $rule->filter_type === 'label' ? ($labelNames[$rule->email_account_id][$rule->filter_value] ?? $rule->filter_value) : null,
+                'kind' => $rule->kind,
+                'conditions' => $rule->conditions->map(fn (RetentionRuleCondition $condition) => [
+                    'type' => $condition->type,
+                    'value' => $condition->value,
+                    'label' => $condition->type === 'label' ? ($labelNames[$rule->email_account_id][$condition->value] ?? null) : null,
+                ])->values(),
                 'retention_days' => $rule->retention_days,
                 'action' => $rule->action,
                 'target_label' => $rule->target_label,
@@ -78,20 +83,28 @@ class RetentionRuleController extends Controller
             $accountIds = $request->user()->emailAccounts()->pluck('email_accounts.id');
             $now = now();
 
-            RetentionRule::insert($accountIds->map(fn (int $accountId) => [
-                ...$request->ruleAttributes(),
-                'email_account_id' => $accountId,
-                'is_active' => false,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ])->all());
+            RetentionRule::insertWithConditions(
+                $accountIds->map(fn (int $accountId) => [
+                    ...$request->ruleAttributes(),
+                    'email_account_id' => $accountId,
+                    'kind' => 'manual',
+                    'is_active' => false,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ])->all(),
+                $accountIds->map(fn () => $request->ruleConditions())->all(),
+            );
 
             // Each copy is simulated on its own row: the count differs per account.
             return back()->with('success', "Regra criada em {$accountIds->count()} contas. Simule cada uma antes de ativar.");
         }
 
-        $rule = RetentionRule::create($request->ruleAttributes());
-        $rule->replaceConditions([['type' => $rule->filter_type, 'value' => $rule->filter_value]]);
+        $rule = DB::transaction(function () use ($request) {
+            $rule = RetentionRule::create($request->ruleAttributes());
+            $rule->replaceConditions($request->ruleConditions());
+
+            return $rule;
+        });
 
         if ($request->boolean('simulate')) {
             return $this->simulateAndRedirect($rule, $simulator, 'Regra criada.');
@@ -105,11 +118,14 @@ class RetentionRuleController extends Controller
         $retentionRule = $this->findRule($request, $rule);
         $previous = $retentionRule->only(['email_account_id', 'filter_type', 'filter_value']);
 
-        $retentionRule->forceFill([
-            ...$request->ruleAttributes(),
-            'is_active' => false,
-            'simulated_at' => null,
-        ])->save();
+        DB::transaction(function () use ($request, $retentionRule) {
+            $retentionRule->forceFill([
+                ...$request->ruleAttributes(),
+                'is_active' => false,
+                'simulated_at' => null,
+            ])->save();
+            $retentionRule->replaceConditions($request->ruleConditions());
+        });
 
         if ($previous['filter_type'] === 'sender' && $retentionRule->only(array_keys($previous)) !== $previous) {
             $this->releaseHubSender($previous['email_account_id'], $previous['filter_value']);
@@ -233,7 +249,7 @@ class RetentionRuleController extends Controller
     {
         $names = [];
 
-        foreach ($rules->filter(fn (RetentionRule $rule) => $rule->filter_type === 'label' || $rule->action === 'add_label')->pluck('email_account_id')->unique() as $accountId) {
+        foreach ($rules->filter(fn (RetentionRule $rule) => $rule->action === 'add_label' || $rule->conditions->contains('type', 'label'))->pluck('email_account_id')->unique() as $accountId) {
             try {
                 $names[$accountId] = array_column($this->provider->listLabels($accounts->find($accountId)), 'name', 'id');
             } catch (ProviderUnavailable|ReauthorizationRequired) {
