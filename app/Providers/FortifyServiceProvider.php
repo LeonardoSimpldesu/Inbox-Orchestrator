@@ -42,16 +42,21 @@ class FortifyServiceProvider extends ServiceProvider
         // Disabled users fail exactly like a wrong password (also before the 2FA challenge).
         Fortify::authenticateUsing(function (Request $request): ?User {
             $user = User::where('email', $request->input(Fortify::username()))->first();
+            // Unknown and disabled users still pay for a hash, so timing doesn't reveal accounts.
+            $passwordMatches = Hash::check((string) $request->input('password'), $user?->password ?? self::dummyHash());
 
-            if ($user === null || $user->isDisabled() || ! Hash::check((string) $request->input('password'), $user->password)) {
-                return null;
-            }
-
-            return $user;
+            return $user !== null && ! $user->isDisabled() && $passwordMatches ? $user : null;
         });
 
         $this->registerViews();
         $this->registerRateLimiters();
+    }
+
+    private static function dummyHash(): string
+    {
+        static $hash = null;
+
+        return $hash ??= Hash::make('timing-equalizer');
     }
 
     private function registerViews(): void

@@ -3,6 +3,7 @@
 namespace Tests\Feature\Auth;
 
 use App\Models\User;
+use Illuminate\Support\Facades\Hash;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -64,6 +65,20 @@ class LoginTest extends TestCase
             ->post('/login', ['email' => 'nobody@example.com', 'password' => 'password'])
             ->assertSessionHasErrors(['email' => 'Credenciais inválidas.']);
 
+        $this->assertGuest();
+    }
+
+    public function test_unknown_and_disabled_users_still_cost_a_password_hash(): void
+    {
+        // Without a hash check the answer for an unknown e-mail comes back faster,
+        // which tells an attacker which e-mails have an account.
+        User::factory()->create(['email' => 'off@example.com', 'disabled_at' => now()]);
+        Hash::spy();
+
+        $this->post('/login', ['email' => 'nobody@example.com', 'password' => 'password']);
+        $this->post('/login', ['email' => 'off@example.com', 'password' => 'password']);
+
+        Hash::shouldHaveReceived('check')->twice();
         $this->assertGuest();
     }
 
