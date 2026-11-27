@@ -24,11 +24,9 @@ class ApplyRetentionRulesCommandTest extends TestCase
 
     private function rule(array $attributes = [], ?EmailAccount $account = null): RetentionRule
     {
-        return RetentionRule::create(array_merge([
+        return RetentionRule::factory()->withConditions([['category', 'promotions']])->create(array_merge([
             'email_account_id' => ($account ?? EmailAccount::factory()->create())->id,
             'name' => 'Regra',
-            'filter_type' => 'category',
-            'filter_value' => 'promotions',
             'retention_days' => 15,
             'action' => 'archive',
             'is_active' => true,

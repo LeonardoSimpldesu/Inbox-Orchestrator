@@ -13,8 +13,6 @@ class RetentionRule extends Model
 {
     use HasFactory;
 
-    public const FILTER_TYPES = ['category', 'domain', 'sender', 'label'];
-
     /** Order in which conditions appear in the Gmail search. */
     public const CONDITION_TYPES = ['category', 'label', 'domain', 'sender', 'subject'];
 
@@ -43,8 +41,6 @@ class RetentionRule extends Model
         'email_account_id',
         'name',
         'kind',
-        'filter_type',
-        'filter_value',
         'retention_days',
         'action',
         'target_label',

@@ -127,8 +127,7 @@ Políticas de expiração configuradas pelo usuário.
 - `id` (PK, BigInt)
 - `email_account_id` (FK -> email_accounts.id, Cascade)
 - `name` (String - ex: "E-mails promocionais expiram em 15 dias")
-- `filter_type` (Enum: `category`, `domain`, `sender`, `label`)
-- `filter_value` (String - `promotions`/`updates`/`social`/`forums`, domínio (inclui subdomínios), e-mail do remetente ou ID do marcador do Gmail)
+- `kind` (Enum: `manual`, `sender_category`, `sender_cleanup`, `hub_block` - quem criou a regra; as três últimas são gerenciadas pela página Remetentes ou pelo Hub e têm as condições travadas na página Regras)
 - `retention_days` (Integer - 0 a 3650; 0 = qualquer idade)
 - `action` (Enum: `archive`, `trash`, `add_label`)
 - `target_label` (String, Nullable - ID do marcador do Gmail, usado se action == `add_label`)
@@ -137,6 +136,15 @@ Políticas de expiração configuradas pelo usuário.
 - `simulated_at` (Timestamp, Nullable - ativar exige simulação; editar zera e pausa)
 - `last_run_at` (Timestamp, Nullable)
 - `created_at`, `updated_at`
+
+### 3.5.1. `retention_rule_conditions`
+Condições de uma regra. Tipos diferentes valem juntos (E); valores do mesmo tipo são alternativas (OU). Design: `docs/superpowers/specs/2026-11-25-combined-rule-conditions-design.md`.
+- `id` (PK, BigInt)
+- `retention_rule_id` (FK -> retention_rules.id, Cascade)
+- `type` (Enum: `category`, `label`, `domain`, `sender`, `subject`)
+- `value` (String - `promotions`/`updates`/`social`/`forums`, ID do marcador do Gmail (no máximo um por regra), domínio (inclui subdomínios), e-mail do remetente ou termo do assunto (sem `" ( ) { }`))
+- `created_at`, `updated_at`
+- *Index:* `[type, value]`
 
 ### 3.6. `rule_execution_logs`
 Histórico de auditoria das execuções de regras.
@@ -179,7 +187,7 @@ Página `/subscriptions`. Design: `docs/superpowers/specs/2026-11-19-subscriptio
    - **Um clique (RFC 8058):** `POST` pelo servidor, só para hosts `https` públicos, com IP validado e fixado, sem redirecionamentos (proteção contra SSRF).
    - **E-mail:** enviado pela conta via Gmail API (`gmail.send`), com o assunto e corpo do `mailto`.
    - **Página do remetente:** aberta no navegador do usuário por uma rota do app (a URL nunca vai para a tela); a pessoa confirma "Já me desinscrevi".
-   - **Regra:** sem mecanismo, cria uma regra (`filter_type = sender`, `retention_days = 0`) para arquivar ou apagar os próximos e-mails; age quando o motor de TTL existir.
+   - **Regra:** sem mecanismo, cria uma regra (`kind = hub_block`, uma condição de remetente, `retention_days = 0`) para arquivar ou apagar os próximos e-mails; age quando o motor de TTL existir.
 5. **E-mails existentes:** na confirmação, manter (padrão), arquivar ou mandar para a lixeira todos os e-mails do remetente no Gmail (inclusive não importados), em lotes de 1.000.
 
 ### 4.3. Motor de Expiração e Retenção (TTL Engine)

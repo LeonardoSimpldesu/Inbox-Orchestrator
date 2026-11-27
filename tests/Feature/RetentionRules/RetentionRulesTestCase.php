@@ -29,20 +29,18 @@ abstract class RetentionRulesTestCase extends TestCase
     }
 
     /**
-     * @param  list<array{0: string, 1: string}>|null  $conditions  [type, value] pairs; defaults to the filter columns
+     * @param  list<array{0: string, 1: string}>|null  $conditions  [type, value] pairs; defaults to Promoções
      */
     protected function rule(array $attributes = [], ?EmailAccount $account = null, ?array $conditions = null): RetentionRule
     {
         $rule = RetentionRule::create(array_merge([
             'email_account_id' => ($account ?? $this->account)->id,
             'name' => 'Promoções em 15 dias',
-            'filter_type' => 'category',
-            'filter_value' => 'promotions',
             'retention_days' => 15,
             'action' => 'archive',
         ], $attributes));
 
-        $conditions ??= [[$rule->filter_type, $rule->filter_value]];
+        $conditions ??= [['category', 'promotions']];
         $rule->replaceConditions(array_map(fn (array $c) => ['type' => $c[0], 'value' => $c[1]], $conditions));
 
         return $rule;

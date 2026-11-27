@@ -6,6 +6,7 @@ use App\Models\EmailAccount;
 use App\Models\EmailSender;
 use App\Models\RetentionRule;
 use App\Services\Senders\SenderCategories;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
@@ -27,7 +28,12 @@ class SenderCategoriesTest extends TestCase
 
     private function categoryRule(EmailSender $sender, string $label): RetentionRule
     {
-        return RetentionRule::factory()->withConditions([['sender', $sender->email]])->create(['email_account_id' => $sender->email_account_id, 'filter_type' => 'sender', 'filter_value' => $sender->email, 'kind' => 'sender_category', 'name' => 'x', 'retention_days' => 0, 'action' => 'add_label', 'target_label' => $label, 'is_active' => true]);
+        return RetentionRule::factory()->withConditions([['sender', $sender->email]])->create(['email_account_id' => $sender->email_account_id, 'kind' => 'sender_category', 'name' => 'x', 'retention_days' => 0, 'action' => 'add_label', 'target_label' => $label, 'is_active' => true]);
+    }
+
+    private function ruleFor(string $email): Builder
+    {
+        return RetentionRule::whereHas('conditions', fn (Builder $query) => $query->where('type', 'sender')->where('value', $email));
     }
 
     public function test_reads_categories_in_one_query(): void
@@ -37,7 +43,7 @@ class SenderCategoriesTest extends TestCase
         $other = $this->sender('a@banco.com', account: EmailAccount::factory()->create());
         $this->categoryRule($banco, 'Label_1');
         $this->categoryRule($other, 'Label_9');
-        RetentionRule::factory()->withConditions([['sender', 'b@x.com']])->create(['email_account_id' => $this->account->id, 'filter_type' => 'sender', 'filter_value' => 'b@x.com', 'action' => 'add_label', 'target_label' => 'Label_5']);
+        RetentionRule::factory()->withConditions([['sender', 'b@x.com']])->create(['email_account_id' => $this->account->id, 'action' => 'add_label', 'target_label' => 'Label_5']);
 
         DB::enableQueryLog();
         $categories = (new SenderCategories)->forSenders(collect([$banco, $none, $other]));
@@ -58,17 +64,17 @@ class SenderCategoriesTest extends TestCase
         $changes = (new SenderCategories)->assign($this->account, collect([$new, $moved]), 'Label_1', 'Banco');
 
         $this->assertSame([$new->id => ['old' => null, 'new' => 'Label_1'], $moved->id => ['old' => 'Label_old', 'new' => 'Label_1']], $changes);
-        $rule = RetentionRule::where('filter_value', 'new@banco.com')->sole();
+        $rule = $this->ruleFor('new@banco.com')->sole();
         $this->assertSame(['Categoria Banco: Banco Novo', 'sender_category', 'add_label', 'Label_1', 0, true], [$rule->name, $rule->kind, $rule->action, $rule->target_label, $rule->retention_days, $rule->is_active]);
         $this->assertSame([['type' => 'sender', 'value' => 'new@banco.com']], $rule->conditions->map->only(['type', 'value'])->all());
         $this->assertSame(now()->timestamp, $rule->simulated_at->timestamp);
-        $this->assertSame('Categoria Banco: moved@banco.com', RetentionRule::where('filter_value', 'moved@banco.com')->sole()->name);
+        $this->assertSame('Categoria Banco: moved@banco.com', $this->ruleFor('moved@banco.com')->sole()->name);
         $this->assertSame(2, RetentionRule::count());
 
         $removed = (new SenderCategories)->assign($this->account, collect([$moved]), null, null);
 
         $this->assertSame([$moved->id => ['old' => 'Label_1', 'new' => null]], $removed);
-        $this->assertFalse(RetentionRule::where('filter_value', 'moved@banco.com')->exists());
+        $this->assertFalse($this->ruleFor('moved@banco.com')->exists());
     }
 
     public function test_assign_skips_unchanged(): void

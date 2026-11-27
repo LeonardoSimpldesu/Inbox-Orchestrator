@@ -71,7 +71,7 @@ class SenderCleanTest extends SendersTestCase
     {
         $sender = $this->sender(['email' => 'news@loja.com']);
         RetentionRule::factory()->withConditions([['sender', 'news@loja.com'], ['subject', 'Oferta']])
-            ->create(['email_account_id' => $this->account->id, 'filter_type' => 'sender', 'filter_value' => 'news@loja.com', 'action' => 'trash', 'retention_days' => 0]);
+            ->create(['email_account_id' => $this->account->id, 'action' => 'trash', 'retention_days' => 0]);
 
         $this->clean(['ids' => [$sender->id], 'cleanup' => 'trash', 'future' => true]);
 

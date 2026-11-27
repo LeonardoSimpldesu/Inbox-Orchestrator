@@ -85,11 +85,9 @@ class EmailAccountTest extends TestCase
             'received_at' => now(),
         ]);
 
-        RetentionRule::create([
+        RetentionRule::factory()->withConditions([['domain', 'promo.com']])->create([
             'email_account_id' => $account->id,
             'name' => 'Clean spam',
-            'filter_type' => 'domain',
-            'filter_value' => 'promo.com',
             'retention_days' => 7,
             'action' => 'trash',
         ]);
@@ -124,11 +122,9 @@ class EmailAccountTest extends TestCase
             'domain' => 'site.com',
         ]);
 
-        RetentionRule::create([
+        RetentionRule::factory()->withConditions([['domain', 'site.com']])->create([
             'email_account_id' => $account->id,
             'name' => 'Rule 1',
-            'filter_type' => 'domain',
-            'filter_value' => 'site.com',
             'retention_days' => 10,
             'action' => 'archive',
         ]);

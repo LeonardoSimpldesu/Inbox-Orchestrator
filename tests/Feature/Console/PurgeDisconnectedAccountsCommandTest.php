@@ -27,7 +27,7 @@ class PurgeDisconnectedAccountsCommandTest extends TestCase
             'email_account_id' => $account->id, 'provider_message_id' => "m{$account->id}", 'provider_thread_id' => 't',
             'email_sender_id' => $sender->id, 'sender_email' => $sender->email, 'sender_domain' => 'x.com', 'labels' => ['INBOX'], 'received_at' => now(),
         ]);
-        RetentionRule::create(['email_account_id' => $account->id, 'name' => 'R', 'filter_type' => 'sender', 'filter_value' => $sender->email, 'retention_days' => 0, 'action' => 'archive']);
+        RetentionRule::factory()->withConditions([['sender', $sender->email]])->create(['email_account_id' => $account->id, 'name' => 'R', 'retention_days' => 0, 'action' => 'archive']);
 
         return $account;
     }

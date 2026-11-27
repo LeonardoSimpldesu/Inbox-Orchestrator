@@ -105,14 +105,9 @@ class RetentionRuleRequest extends FormRequest
      */
     public function ruleAttributes(): array
     {
-        $first = $this->ruleConditions()[0];
-
         return [
             'email_account_id' => $this->integer('email_account_id'),
             'name' => $this->string('name')->toString(),
-            // Kept in sync with the first condition until the old columns are dropped.
-            'filter_type' => $first['type'],
-            'filter_value' => $first['value'],
             'retention_days' => $this->integer('retention_days'),
             'action' => $this->string('action')->toString(),
             'target_label' => $this->input('action') === 'add_label' ? $this->string('target_label')->toString() : null,

@@ -126,8 +126,8 @@ class RetentionRuleConditionsTest extends RetentionRulesTestCase
 
     public function test_managed_rules_keep_their_conditions(): void
     {
-        $category = $this->rule(['kind' => 'sender_category', 'filter_type' => 'sender', 'filter_value' => 'a@x.com', 'action' => 'add_label', 'target_label' => 'Label_1']);
-        $block = $this->rule(['kind' => 'hub_block', 'filter_type' => 'sender', 'filter_value' => 'b@x.com', 'action' => 'trash', 'retention_days' => 0]);
+        $category = $this->rule(['kind' => 'sender_category', 'action' => 'add_label', 'target_label' => 'Label_1'], conditions: [['sender', 'a@x.com']]);
+        $block = $this->rule(['kind' => 'hub_block', 'action' => 'trash', 'retention_days' => 0], conditions: [['sender', 'b@x.com']]);
 
         $this->actingAs($this->user)->put("/retention-rules/{$category->id}", $this->payload([
             'conditions' => $this->conditions([['sender', 'a@x.com'], ['subject', 'Oi']]), 'action' => 'add_label', 'target_label' => 'Label_1',
@@ -147,8 +147,8 @@ class RetentionRuleConditionsTest extends RetentionRulesTestCase
 
     public function test_managed_rules_keep_their_action_family(): void
     {
-        $category = $this->rule(['kind' => 'sender_category', 'filter_type' => 'sender', 'filter_value' => 'a@x.com', 'action' => 'add_label', 'target_label' => 'Label_1']);
-        $cleanup = $this->rule(['kind' => 'sender_cleanup', 'filter_type' => 'sender', 'filter_value' => 'b@x.com', 'action' => 'archive', 'retention_days' => 0]);
+        $category = $this->rule(['kind' => 'sender_category', 'action' => 'add_label', 'target_label' => 'Label_1'], conditions: [['sender', 'a@x.com']]);
+        $cleanup = $this->rule(['kind' => 'sender_cleanup', 'action' => 'archive', 'retention_days' => 0], conditions: [['sender', 'b@x.com']]);
 
         $this->actingAs($this->user)->put("/retention-rules/{$category->id}", $this->payload([
             'conditions' => $this->conditions([['sender', 'a@x.com']]), 'action' => 'trash',

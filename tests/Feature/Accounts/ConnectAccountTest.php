@@ -241,7 +241,7 @@ class ConnectAccountTest extends AccountsTestCase
         $bob = User::factory()->create();
         $old = EmailAccount::factory()->for($alice)->create(['account_email' => 'shared@gmail.com']);
         EmailSender::create(['email_account_id' => $old->id, 'email' => 'a@x.com', 'domain' => 'x.com']);
-        RetentionRule::create(['email_account_id' => $old->id, 'name' => 'Regra da Alice', 'filter_type' => 'domain', 'filter_value' => 'x.com', 'retention_days' => 7, 'action' => 'trash']);
+        RetentionRule::factory()->withConditions([['domain', 'x.com']])->create(['email_account_id' => $old->id, 'name' => 'Regra da Alice', 'retention_days' => 7, 'action' => 'trash']);
         $old->delete();
 
         $this->connect($bob, 'shared@gmail.com')->assertSessionHas('success', 'Conta shared@gmail.com conectada.');

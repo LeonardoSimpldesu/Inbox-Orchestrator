@@ -5,7 +5,7 @@ Itens conhecidos que ficaram para depois. Cada um traz o impacto, onde está e u
 | # | Item | Impacto | Prioridade |
 |---|------|---------|------------|
 | 11 | Novidades do Gmail por polling (5 min) em vez de notificações push | Desempenho / tempo real | Média (quando houver servidor público) |
-| 19 | Regras sem busca livre nem filtros combinados | Funcionalidade | Baixa |
+| 21 | Busca livre do Gmail nas regras (opção futura) | Funcionalidade | Baixa |
 
 ---
 
@@ -23,12 +23,15 @@ Itens conhecidos que ficaram para depois. Cada um traz o impacto, onde está e u
 3. Chamar `users.watch` para cada conta ao conectar, e renovar a cada 7 dias com um comando agendado.
 4. Na rota, validar o token OIDC do Pub/Sub, achar a conta pelo `emailAddress` do aviso e despachar `SyncEmailAccountJob` com `SyncMode::Changes`. O polling pode continuar como rede de segurança, com intervalo maior.
 
-## 19. Regras sem busca livre nem filtros combinados
+## 21. Busca livre do Gmail nas regras (opção futura)
 
-**Origem:** Regras de expiração (2026-11-22). "Todas as contas" foi resolvido em 2026-11-23 (cria uma cópia pausada por conta).
+**Origem:** Regras com condições combinadas (2026-11-25). O dono escolheu só as condições estruturadas (caminho A) e deixou a busca livre registrada como opção.
 
-**O que acontece:** cada regra tem um único filtro (categoria, domínio, remetente ou marcador) e não aceita a busca livre do Gmail (`query` do SPEC original). Para "Promoções **e** domínio X" não há como.
+**O que acontece:** as regras aceitam categoria, marcador, domínio, remetente e assunto, combinados com E (e OU dentro do mesmo tipo). Não há como usar outros operadores do Gmail (anexo, tamanho, palavra no corpo, `has:`, `larger:`).
 
-**Onde:** `RetentionRuleRequest`, `RuleQuery`, `retention_rules.filter_type`.
+**Onde:** `RetentionRuleRequest`, `RuleQuery`, `RetentionRule::CONDITION_TYPES`.
 
-**Sugestão:** permitir uma lista de condições (E); a busca livre só com pré-visualização obrigatória e validação de operadores perigosos.
+**Sugestão (caminho B):** um tipo de condição novo, "Busca avançada (Gmail)", que se combina com E com as outras condições:
+1. O texto vai entre parênteses na busca, e as exclusões fixas (`-is:starred -in:sent -in:drafts`) continuam fora deles.
+2. Recusar operadores que furam a proteção ou mudam o escopo: `in:anywhere`, `in:sent`, `is:starred`, `in:trash`, `in:spam`, `label:` (marcador é sempre por id), e parênteses, chaves ou aspas desbalanceados.
+3. A simulação obrigatória antes de ativar já serve de pré-visualização.

@@ -20,7 +20,7 @@ class RetentionRuleCrudTest extends RetentionRulesTestCase
 
     public function test_lists_only_own_rules_with_history_without_n_plus_one(): void
     {
-        $rule = $this->rule(['filter_type' => 'label', 'filter_value' => 'Label_2', 'action' => 'add_label', 'target_label' => 'Label_1', 'last_run_at' => now()]);
+        $rule = $this->rule(['action' => 'add_label', 'target_label' => 'Label_1', 'last_run_at' => now()], conditions: [['label', 'Label_2']]);
         for ($i = 0; $i < 12; $i++) {
             $rule->logExecution('success', $i);
         }
@@ -60,7 +60,7 @@ class RetentionRuleCrudTest extends RetentionRulesTestCase
 
     public function test_list_falls_back_to_label_ids_when_gmail_is_unavailable(): void
     {
-        $this->rule(['filter_type' => 'label', 'filter_value' => 'Label_2']);
+        $this->rule([], conditions: [['label', 'Label_2']]);
         $this->provider->failNext['listLabels'] = new ProviderUnavailable('rate_limited');
 
         $this->actingAs($this->user)->get('/retention-rules')->assertOk()->assertInertia(fn (Assert $page) => $page
@@ -166,7 +166,7 @@ class RetentionRuleCrudTest extends RetentionRulesTestCase
     {
         $sender = EmailSender::create(['email_account_id' => $this->account->id, 'email' => 'promo@loja.com', 'domain' => 'loja.com', 'unsubscribe_status' => 'blocked', 'unsubscribe_method' => 'rule']);
         $other = EmailSender::create(['email_account_id' => $this->account->id, 'email' => 'news@x.com', 'domain' => 'x.com', 'unsubscribe_status' => 'requested', 'unsubscribe_method' => 'one_click']);
-        $rule = $this->rule(['kind' => 'hub_block', 'filter_type' => 'sender', 'filter_value' => 'promo@loja.com', 'retention_days' => 0]);
+        $rule = $this->rule(['kind' => 'hub_block', 'retention_days' => 0], conditions: [['sender', 'promo@loja.com']]);
         $rule->logExecution('success', 3);
 
         $this->actingAs($this->user)->delete("/retention-rules/{$rule->id}")->assertSessionHas('success', 'Regra apagada.');
@@ -181,7 +181,7 @@ class RetentionRuleCrudTest extends RetentionRulesTestCase
     public function test_deleting_a_manual_sender_rule_keeps_the_hub_status(): void
     {
         $sender = EmailSender::create(['email_account_id' => $this->account->id, 'email' => 'promo@loja.com', 'domain' => 'loja.com', 'unsubscribe_status' => 'blocked', 'unsubscribe_method' => 'rule']);
-        $manual = $this->rule(['filter_type' => 'sender', 'filter_value' => 'promo@loja.com', 'retention_days' => 0]);
+        $manual = $this->rule(['retention_days' => 0], conditions: [['sender', 'promo@loja.com']]);
 
         $this->actingAs($this->user)->delete("/retention-rules/{$manual->id}");
 
