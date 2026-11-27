@@ -3,7 +3,10 @@
 namespace Tests\Feature\Auth;
 
 use App\Models\User;
-use Illuminate\Auth\Notifications\ResetPassword;
+use App\Notifications\ResetPasswordNotification as ResetPassword;
+use Illuminate\Contracts\Http\Kernel;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Http\Middleware\TrustHosts;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
@@ -42,6 +45,30 @@ class PasswordResetTest extends TestCase
             ->assertSessionHasNoErrors();
 
         Notification::assertSentTo($user, ResetPassword::class);
+    }
+
+    public function test_reset_e_mail_is_queued_and_links_to_the_app_url_whatever_the_host(): void
+    {
+        config(['app.url' => 'https://inbox.example.test']);
+        $user = User::factory()->create(['email' => 'user@example.com']);
+
+        $this->post('http://evil.example/forgot-password', ['email' => 'user@example.com']);
+
+        Notification::assertSentTo($user, ResetPassword::class, function (ResetPassword $notification) use ($user) {
+            $url = $notification->toMail($user)->actionUrl;
+
+            return $notification instanceof ShouldQueue
+                && str_starts_with($url, 'https://inbox.example.test/reset-password/')
+                && ! str_contains($url, 'evil.example');
+        });
+    }
+
+    public function test_only_the_app_host_is_trusted(): void
+    {
+        config(['app.url' => 'https://inbox.example.test']);
+
+        $this->assertContains(TrustHosts::class, app(Kernel::class)->getGlobalMiddleware());
+        $this->assertSame(['^inbox\.example\.test$'], app(TrustHosts::class)->hosts());
     }
 
     public function test_unknown_email_gets_the_same_response(): void
