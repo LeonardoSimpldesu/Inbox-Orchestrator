@@ -73,4 +73,13 @@ class RuleSimulatorTest extends RetentionTestCase
 
         $this->simulator()->simulate($this->rule(['filter_type' => 'label', 'filter_value' => 'Label_gone']));
     }
+
+    public function test_simulation_with_a_deleted_label_among_several_conditions_throws(): void
+    {
+        $this->provider->labels = [['id' => 'Label_1', 'name' => 'Lojas']];
+
+        $this->expectException(LabelMissing::class);
+
+        $this->simulator()->simulate($this->rule(['action' => 'trash'], [['domain', 'loja.com'], ['label', 'Label_gone']]));
+    }
 }

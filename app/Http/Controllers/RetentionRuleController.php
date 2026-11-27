@@ -91,6 +91,7 @@ class RetentionRuleController extends Controller
         }
 
         $rule = RetentionRule::create($request->ruleAttributes());
+        $rule->replaceConditions([['type' => $rule->filter_type, 'value' => $rule->filter_value]]);
 
         if ($request->boolean('simulate')) {
             return $this->simulateAndRedirect($rule, $simulator, 'Regra criada.');
