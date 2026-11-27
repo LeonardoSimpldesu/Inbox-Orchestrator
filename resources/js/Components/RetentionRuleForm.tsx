@@ -62,6 +62,7 @@ export default function RetentionRuleForm({ accounts, rule, onClose }: Retention
     const hasLabelCondition = form.data.conditions.some((condition) => condition.type === 'label');
     const needsLabels = !allAccounts && (hasLabelCondition || form.data.action === 'add_label');
     const errors = form.errors as Record<string, string | undefined>;
+    const conditionsKey = JSON.stringify(form.data.conditions);
     const allowedActions = (Object.keys(ACTION_LABELS) as RuleAction[]).filter((action) => {
         if (allAccounts && action === 'add_label') return false;
         if (rule?.kind === 'sender_category') return action === 'add_label';
@@ -82,11 +83,13 @@ export default function RetentionRuleForm({ accounts, rule, onClose }: Retention
     }, [needsLabels, form.data.email_account_id]);
 
     useEffect(() => {
-        if (!nameTouched) {
-            form.setData('name', suggestName(form.data, labels));
+        const suggestion = suggestName(form.data, labels);
+        if (!nameTouched && suggestion !== form.data.name) {
+            form.setData('name', suggestion);
         }
+        // setData hands back a new conditions array, so the effect keys on its content.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [form.data.conditions, form.data.retention_days, form.data.action, form.data.target_label, labels, nameTouched]);
+    }, [conditionsKey, form.data.retention_days, form.data.action, form.data.target_label, labels, nameTouched]);
 
     const setCondition = (index: number, condition: RuleCondition) =>
         form.setData((data) => ({ ...data, conditions: data.conditions.map((current, i) => (i === index ? condition : current)) }));
@@ -220,6 +223,7 @@ export default function RetentionRuleForm({ accounts, rule, onClose }: Retention
                                     </select>
                                     <div>
                                         {conditionValue(condition, index)}
+                                        {condition.type === 'subject' && <p className="mt-1 text-xs text-slate-500">O Gmail diferencia acentos: escreva como aparece no e-mail.</p>}
                                         {error(`conditions.${index}.value`)}
                                         {error(`conditions.${index}.type`)}
                                     </div>
