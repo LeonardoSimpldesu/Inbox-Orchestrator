@@ -1,9 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useForm } from '@inertiajs/react';
 import { Plus, X } from 'lucide-react';
-import type { GmailLabel, RetentionRuleRow, RuleAction, RuleFilterType } from '@/types';
+import type { GmailLabel, RetentionRuleRow, RuleAction, RuleCondition, RuleConditionType } from '@/types';
 import PrimaryButton from '@/Components/PrimaryButton';
-import { ACTION_LABELS, CATEGORY_LABELS, FILTER_TYPE_LABELS } from '@/lib/rules';
+import { ACTION_LABELS, CATEGORY_LABELS, CONDITION_TYPE_LABELS, MANAGED_BY, describeConditions } from '@/lib/rules';
 
 interface RetentionRuleFormProps {
     accounts: { id: number; account_email: string }[];
@@ -14,8 +14,7 @@ interface RetentionRuleFormProps {
 interface RuleFormData {
     email_account_id: number | 'all';
     name: string;
-    filter_type: RuleFilterType;
-    filter_value: string;
+    conditions: RuleCondition[];
     retention_days: number;
     action: RuleAction;
     target_label: string;
@@ -23,14 +22,18 @@ interface RuleFormData {
     simulate: boolean;
 }
 
+const MAX_CONDITIONS = 20;
+
+function blankCondition(type: RuleConditionType): RuleCondition {
+    return { type, value: type === 'category' ? 'promotions' : '' };
+}
+
 function suggestName(data: RuleFormData, labels: GmailLabel[]): string {
     const labelName = (id: string) => labels.find((label) => label.id === id)?.name ?? '';
-    const subject = {
-        category: `${CATEGORY_LABELS[data.filter_value] ?? 'Categoria'}`,
-        domain: `E-mails de ${data.filter_value || 'domínio'}`,
-        sender: `E-mails de ${data.filter_value || 'remetente'}`,
-        label: `Marcador ${labelName(data.filter_value) || ''}`.trim(),
-    }[data.filter_type];
+    const filled = data.conditions
+        .filter((condition) => condition.value.trim() !== '')
+        .map((condition) => (condition.type === 'label' ? { ...condition, label: labelName(condition.value) || null } : condition));
+    const subject = filled.length > 0 ? describeConditions(filled) : 'Nova regra';
     const when = data.retention_days > 0 ? ` com mais de ${data.retention_days} dias` : '';
     const action = data.action === 'add_label' ? `: marcar ${labelName(data.target_label)}` : data.action === 'trash' ? ': lixeira' : ': arquivar';
     return `${subject}${when}${action}`.slice(0, 100);
@@ -43,8 +46,7 @@ export default function RetentionRuleForm({ accounts, rule, onClose }: Retention
     const form = useForm<RuleFormData>({
         email_account_id: rule?.email_account_id ?? accounts[0]?.id ?? 0,
         name: rule?.name ?? '',
-        filter_type: rule?.filter_type ?? 'category',
-        filter_value: rule?.filter_value ?? 'promotions',
+        conditions: rule?.conditions.map(({ type, value }) => ({ type, value })) ?? [blankCondition('category')],
         retention_days: rule?.retention_days ?? 15,
         action: rule?.action ?? 'archive',
         target_label: rule?.target_label ?? '',
@@ -56,7 +58,16 @@ export default function RetentionRuleForm({ accounts, rule, onClose }: Retention
     const [nameTouched, setNameTouched] = useState(rule !== null);
     const [newLabel, setNewLabel] = useState('');
     const allAccounts = form.data.email_account_id === 'all';
-    const needsLabels = !allAccounts && (form.data.filter_type === 'label' || form.data.action === 'add_label');
+    const managedBy = rule ? MANAGED_BY[rule.kind] : undefined;
+    const hasLabelCondition = form.data.conditions.some((condition) => condition.type === 'label');
+    const needsLabels = !allAccounts && (hasLabelCondition || form.data.action === 'add_label');
+    const errors = form.errors as Record<string, string | undefined>;
+    const allowedActions = (Object.keys(ACTION_LABELS) as RuleAction[]).filter((action) => {
+        if (allAccounts && action === 'add_label') return false;
+        if (rule?.kind === 'sender_category') return action === 'add_label';
+        if (managedBy) return action !== 'add_label';
+        return true;
+    });
 
     useEffect(() => {
         if (!needsLabels || !form.data.email_account_id) {
@@ -75,14 +86,21 @@ export default function RetentionRuleForm({ accounts, rule, onClose }: Retention
             form.setData('name', suggestName(form.data, labels));
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [form.data.filter_type, form.data.filter_value, form.data.retention_days, form.data.action, form.data.target_label, labels, nameTouched]);
+    }, [form.data.conditions, form.data.retention_days, form.data.action, form.data.target_label, labels, nameTouched]);
 
-    const createLabel = async (field: 'filter_value' | 'target_label') => {
+    const setCondition = (index: number, condition: RuleCondition) =>
+        form.setData((data) => ({ ...data, conditions: data.conditions.map((current, i) => (i === index ? condition : current)) }));
+    const addCondition = () =>
+        form.setData((data) => ({ ...data, conditions: [...data.conditions, blankCondition('subject')] }));
+    const removeCondition = (index: number) =>
+        form.setData((data) => ({ ...data, conditions: data.conditions.filter((_, i) => i !== index) }));
+
+    const createLabel = async (pick: (id: string) => void) => {
         if (newLabel.trim() === '') return;
         try {
             const response = await window.axios.post<{ label: GmailLabel }>(`/accounts/${form.data.email_account_id}/labels`, { name: newLabel });
             setLabels((current) => [...current.filter((l) => l.id !== response.data.label.id), response.data.label].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')));
-            form.setData(field, response.data.label.id);
+            pick(response.data.label.id);
             setNewLabel('');
         } catch {
             setLabelsError('Não foi possível criar o marcador no Gmail. Tente de novo.');
@@ -99,9 +117,9 @@ export default function RetentionRuleForm({ accounts, rule, onClose }: Retention
         }
     };
 
-    const labelSelect = (field: 'filter_value' | 'target_label') => (
+    const labelSelect = (value: string, pick: (id: string) => void) => (
         <div className="space-y-2">
-            <select className={input} value={form.data[field]} onChange={(e) => form.setData(field, e.target.value)}>
+            <select className={input} value={value} onChange={(e) => pick(e.target.value)}>
                 <option value="">Escolha um marcador…</option>
                 {labels.map((label) => (
                     <option key={label.id} value={label.id}>{label.name}</option>
@@ -109,14 +127,34 @@ export default function RetentionRuleForm({ accounts, rule, onClose }: Retention
             </select>
             <div className="flex gap-2">
                 <input className={input} placeholder="Novo marcador" value={newLabel} onChange={(e) => setNewLabel(e.target.value)} maxLength={100} />
-                <button type="button" onClick={() => createLabel(field)} className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-slate-700 bg-slate-800 px-3 text-xs font-semibold text-slate-200 hover:bg-slate-700 cursor-pointer">
+                <button type="button" onClick={() => createLabel(pick)} className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg border border-slate-700 bg-slate-800 px-3 text-xs font-semibold text-slate-200 hover:bg-slate-700 cursor-pointer">
                     <Plus className="w-3.5 h-3.5" /> Criar marcador
                 </button>
             </div>
         </div>
     );
 
-    const error = (field: keyof RuleFormData) => form.errors[field] && <p className="mt-1 text-xs text-rose-300">{form.errors[field]}</p>;
+    const error = (field: string) => errors[field] && <p className="mt-1 text-xs text-rose-300">{errors[field]}</p>;
+
+    const conditionValue = (condition: RuleCondition, index: number) => {
+        const set = (value: string) => setCondition(index, { ...condition, value });
+        switch (condition.type) {
+            case 'category':
+                return (
+                    <select className={input} aria-label="Categoria" value={condition.value} onChange={(e) => set(e.target.value)}>
+                        {Object.entries(CATEGORY_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                    </select>
+                );
+            case 'label':
+                return labelSelect(condition.value, set);
+            case 'domain':
+                return <input className={input} aria-label="Domínio" placeholder="amazon.com.br" value={condition.value} onChange={(e) => set(e.target.value)} />;
+            case 'sender':
+                return <input className={input} aria-label="Remetente" type="email" placeholder="news@site.com" value={condition.value} onChange={(e) => set(e.target.value)} />;
+            case 'subject':
+                return <input className={input} aria-label="Assunto" placeholder="Bem-vindo" maxLength={100} value={condition.value} onChange={(e) => set(e.target.value)} />;
+        }
+    };
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4" role="dialog" aria-modal="true" aria-labelledby="rule-form-title">
@@ -131,18 +169,24 @@ export default function RetentionRuleForm({ accounts, rule, onClose }: Retention
                     <select
                         id="rule-account"
                         className={input}
+                        disabled={managedBy !== undefined}
                         value={form.data.email_account_id}
                         onChange={(e) => {
                             // Labels belong to one account: drop the old list and any picked label.
                             setLabels([]);
-                            form.setData((data) => ({
-                                ...data,
-                                email_account_id: e.target.value === 'all' ? 'all' : Number(e.target.value),
-                                filter_type: e.target.value === 'all' && data.filter_type === 'label' ? 'category' : data.filter_type,
-                                filter_value: data.filter_type === 'label' ? (e.target.value === 'all' ? 'promotions' : '') : data.filter_value,
-                                action: e.target.value === 'all' && data.action === 'add_label' ? 'archive' : data.action,
-                                target_label: '',
-                            }));
+                            form.setData((data) => {
+                                const all = e.target.value === 'all';
+                                const conditions = data.conditions
+                                    .filter((condition) => !all || condition.type !== 'label')
+                                    .map((condition) => (condition.type === 'label' ? { ...condition, value: '' } : condition));
+                                return {
+                                    ...data,
+                                    email_account_id: all ? 'all' : Number(e.target.value),
+                                    conditions: conditions.length > 0 ? conditions : [blankCondition('category')],
+                                    action: all && data.action === 'add_label' ? 'archive' : data.action,
+                                    target_label: '',
+                                };
+                            });
                         }}
                     >
                         {accounts.map((account) => <option key={account.id} value={account.id}>{account.account_email}</option>)}
@@ -152,36 +196,53 @@ export default function RetentionRuleForm({ accounts, rule, onClose }: Retention
                     {error('email_account_id')}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div>
-                        <label className={labelClass} htmlFor="rule-filter-type">Filtro</label>
-                        <select
-                            id="rule-filter-type"
-                            className={input}
-                            value={form.data.filter_type}
-                            onChange={(e) => {
-                                const type = e.target.value as RuleFilterType;
-                                form.setData((data) => ({ ...data, filter_type: type, filter_value: type === 'category' ? 'promotions' : '' }));
-                            }}
-                        >
-                            {(Object.keys(FILTER_TYPE_LABELS) as RuleFilterType[])
-                                .filter((type) => !allAccounts || type !== 'label')
-                                .map((type) => <option key={type} value={type}>{FILTER_TYPE_LABELS[type]}</option>)}
-                        </select>
-                    </div>
-                    <div className="sm:col-span-2">
-                        <label className={labelClass}>Valor</label>
-                        {form.data.filter_type === 'category' && (
-                            <select className={input} value={form.data.filter_value} onChange={(e) => form.setData('filter_value', e.target.value)}>
-                                {Object.entries(CATEGORY_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-                            </select>
-                        )}
-                        {form.data.filter_type === 'domain' && <input className={input} placeholder="amazon.com.br" value={form.data.filter_value} onChange={(e) => form.setData('filter_value', e.target.value)} />}
-                        {form.data.filter_type === 'sender' && <input className={input} type="email" placeholder="news@site.com" value={form.data.filter_value} onChange={(e) => form.setData('filter_value', e.target.value)} />}
-                        {form.data.filter_type === 'label' && labelSelect('filter_value')}
-                        {error('filter_value')}
-                    </div>
-                </div>
+                <fieldset className="space-y-2">
+                    <legend className={labelClass}>Condições</legend>
+                    {managedBy ? (
+                        <p className="rounded-lg border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm text-slate-300">
+                            {describeConditions(rule?.conditions ?? [])}
+                            <span className="mt-1 block text-xs text-slate-500">{managedBy}: as condições não podem ser alteradas aqui.</span>
+                        </p>
+                    ) : (
+                        <>
+                            <p className="text-xs text-slate-500">Todas as condições precisam valer. Repita um tipo para aceitar alternativas (ex.: dois assuntos = um ou outro).</p>
+                            {form.data.conditions.map((condition, index) => (
+                                <div key={index} className="grid grid-cols-[1fr_auto] sm:grid-cols-[10rem_1fr_auto] gap-2 items-start">
+                                    <select
+                                        className={`${input} col-span-2 sm:col-span-1`}
+                                        aria-label={`Tipo da condição ${index + 1}`}
+                                        value={condition.type}
+                                        onChange={(e) => setCondition(index, blankCondition(e.target.value as RuleConditionType))}
+                                    >
+                                        {(Object.keys(CONDITION_TYPE_LABELS) as RuleConditionType[])
+                                            .filter((type) => type !== 'label' || condition.type === 'label' || (!allAccounts && !hasLabelCondition))
+                                            .map((type) => <option key={type} value={type}>{CONDITION_TYPE_LABELS[type]}</option>)}
+                                    </select>
+                                    <div>
+                                        {conditionValue(condition, index)}
+                                        {error(`conditions.${index}.value`)}
+                                        {error(`conditions.${index}.type`)}
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => removeCondition(index)}
+                                        disabled={form.data.conditions.length === 1}
+                                        aria-label={`Remover condição ${index + 1}`}
+                                        className="mt-2 text-slate-400 hover:text-white disabled:opacity-30 cursor-pointer disabled:cursor-default"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            ))}
+                            {form.data.conditions.length < MAX_CONDITIONS && (
+                                <button type="button" onClick={addCondition} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 cursor-pointer">
+                                    <Plus className="w-3.5 h-3.5" /> Adicionar condição
+                                </button>
+                            )}
+                        </>
+                    )}
+                    {error('conditions')}
+                </fieldset>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
@@ -193,13 +254,11 @@ export default function RetentionRuleForm({ accounts, rule, onClose }: Retention
                     <div className="sm:col-span-2">
                         <label className={labelClass} htmlFor="rule-action">Ação</label>
                         <select id="rule-action" className={input} value={form.data.action} onChange={(e) => form.setData('action', e.target.value as RuleAction)}>
-                            {(Object.keys(ACTION_LABELS) as RuleAction[])
-                                .filter((action) => !allAccounts || action !== 'add_label')
-                                .map((action) => <option key={action} value={action}>{ACTION_LABELS[action]}</option>)}
+                            {allowedActions.map((action) => <option key={action} value={action}>{ACTION_LABELS[action]}</option>)}
                         </select>
                         {form.data.action === 'add_label' && (
                             <div className="mt-2 space-y-2">
-                                {labelSelect('target_label')}
+                                {labelSelect(form.data.target_label, (id) => form.setData('target_label', id))}
                                 <label className="flex items-center gap-2 text-sm text-slate-200">
                                     <input type="checkbox" className="h-4 w-4 accent-indigo-500" checked={form.data.archive_after_label} onChange={(e) => form.setData('archive_after_label', e.target.checked)} />
                                     Também arquivar

@@ -25,8 +25,6 @@ export interface User {
 export interface RetentionRuleSummary {
     id: number;
     name: string;
-    filter_type: 'category' | 'domain' | 'sender' | 'query';
-    filter_value: string;
     retention_days: number;
     action: 'archive' | 'trash' | 'add_label';
     is_active: boolean;
@@ -79,7 +77,15 @@ export interface Paginated<T> {
     links: PaginationLink[];
 }
 
-export type RuleFilterType = 'category' | 'domain' | 'sender' | 'label';
+export type RuleConditionType = 'category' | 'label' | 'domain' | 'sender' | 'subject';
+export type RuleKind = 'manual' | 'sender_category' | 'sender_cleanup' | 'hub_block';
+
+export interface RuleCondition {
+    type: RuleConditionType;
+    value: string;
+    /** Label name, only for label conditions. */
+    label?: string | null;
+}
 export type RuleAction = 'archive' | 'trash' | 'add_label';
 
 export interface RuleLog {
@@ -94,9 +100,8 @@ export interface RetentionRuleRow {
     name: string;
     email_account_id: number;
     account_email: string;
-    filter_type: RuleFilterType;
-    filter_value: string;
-    filter_label: string | null;
+    kind: RuleKind;
+    conditions: RuleCondition[];
     retention_days: number;
     action: RuleAction;
     target_label: string | null;
