@@ -2,6 +2,7 @@
 
 namespace App\Services\Sync;
 
+use App\Services\Providers\GmailSearch;
 use Illuminate\Support\Str;
 
 final class HeaderParser
@@ -22,7 +23,8 @@ final class HeaderParser
 
         $at = strrpos($address, '@');
 
-        if ($at === false || $at === 0 || $at === strlen($address) - 1) {
+        if ($at === false || $at === 0 || $at === strlen($address) - 1
+            || preg_match(GmailSearch::UNSAFE_ADDRESS_PATTERN, $address) === 1) {
             return null;
         }
 

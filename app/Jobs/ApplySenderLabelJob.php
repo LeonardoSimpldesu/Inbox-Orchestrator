@@ -7,6 +7,7 @@ use App\Exceptions\ProviderUnavailable;
 use App\Exceptions\ReauthorizationRequired;
 use App\Jobs\Concerns\RunsPerSender;
 use App\Models\EmailSender;
+use App\Services\Providers\GmailSearch;
 use App\Services\Senders\SenderCategories;
 use App\Services\Sync\MessageStore;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -44,7 +45,7 @@ class ApplySenderLabelJob implements ShouldQueue
                 $current = $categories->forSenders(collect([$sender]))[$sender->id];
                 $add = array_filter([$this->newLabel === $current ? $this->newLabel : null]);
                 $remove = array_filter([$this->oldLabel]);
-                $ids = $provider->listAllMessageIds($sender->account, 'from:'.$sender->email);
+                $ids = $provider->listAllMessageIds($sender->account, GmailSearch::from($sender->email));
 
                 $provider->batchModify($sender->account, $ids, array_values($add), array_values($remove));
                 $store->applyLabelChange($sender->account, $ids, array_values($add), array_values($remove));

@@ -6,6 +6,7 @@ use App\Contracts\EmailProviderInterface;
 use App\Exceptions\ProviderUnavailable;
 use App\Exceptions\ReauthorizationRequired;
 use App\Models\RetentionRule;
+use App\Services\Providers\GmailSearch;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -134,7 +135,7 @@ class RetentionRuleRequest extends FormRequest
             $rules["conditions.{$index}.value"] = ['required', 'string', ...match ($condition['type'] ?? null) {
                 'category' => [Rule::in(array_keys(RetentionRule::CATEGORIES))],
                 'domain' => ['regex:'.self::DOMAIN_PATTERN, 'max:253'],
-                'sender' => ['email', 'max:255'],
+                'sender' => ['email', 'max:255', 'not_regex:'.GmailSearch::UNSAFE_ADDRESS_PATTERN],
                 'subject' => ['max:100', 'regex:'.self::SUBJECT_PATTERN],
                 default => ['max:255'],
             }];

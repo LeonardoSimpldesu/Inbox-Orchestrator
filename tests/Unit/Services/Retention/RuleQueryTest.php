@@ -45,7 +45,7 @@ class RuleQueryTest extends TestCase
     {
         $query = RuleQuery::for($this->rule([['sender', 'news@site.com']], ['retention_days' => 30, 'action' => 'trash']));
 
-        $this->assertSame('-is:starred -in:sent -in:drafts older_than:30d from:news@site.com', $query->query);
+        $this->assertSame('-is:starred -in:sent -in:drafts older_than:30d from:"news@site.com"', $query->query);
     }
 
     public function test_label_filter_uses_label_id(): void
@@ -111,14 +111,14 @@ class RuleQueryTest extends TestCase
     {
         $query = RuleQuery::for($this->rule([['subject', 'Alerta de segurança'], ['sender', 'no-reply@accounts.google.com']], ['action' => 'archive']));
 
-        $this->assertSame('-is:starred -in:sent -in:drafts from:no-reply@accounts.google.com subject:"Alerta de segurança" in:inbox', $query->query);
+        $this->assertSame('-is:starred -in:sent -in:drafts from:"no-reply@accounts.google.com" subject:"Alerta de segurança" in:inbox', $query->query);
     }
 
     public function test_several_senders_or_domains_are_grouped(): void
     {
         $query = RuleQuery::for($this->rule([['domain', 'a.com'], ['domain', 'b.com'], ['sender', 'x@c.com'], ['sender', 'y@c.com']], ['action' => 'trash', 'retention_days' => 7]));
 
-        $this->assertSame('-is:starred -in:sent -in:drafts older_than:7d {from:@a.com from:@b.com} {from:x@c.com from:y@c.com}', $query->query);
+        $this->assertSame('-is:starred -in:sent -in:drafts older_than:7d {from:@a.com from:@b.com} {from:"x@c.com" from:"y@c.com"}', $query->query);
         $this->assertSame([], $query->labelIds);
     }
 
