@@ -38,13 +38,36 @@ final readonly class RuleQuery
             $terms[] = "older_than:{$rule->retention_days}d";
         }
 
-        match ($rule->filter_type) {
-            'category' => $labelIds[] = RetentionRule::CATEGORIES[$rule->filter_value]
-                ?? throw new InvalidArgumentException('Unknown category.'),
-            'label' => $labelIds[] = $rule->filter_value,
-            'domain' => $terms[] = 'from:@'.$rule->filter_value,
-            'sender' => $terms[] = 'from:'.$rule->filter_value,
-        };
+        if ($rule->conditions->isEmpty()) {
+            // Without conditions the search would match the whole mailbox.
+            throw new InvalidArgumentException('Rule has no conditions.');
+        }
+
+        $byType = $rule->conditions->groupBy('type')->map->pluck('value');
+
+        foreach (RetentionRule::CONDITION_TYPES as $type) {
+            $values = $byType->get($type)?->all();
+
+            if ($values === null) {
+                continue;
+            }
+
+            if ($type === 'label' || ($type === 'category' && count($values) === 1)) {
+                array_push($labelIds, ...array_map(fn (string $value) => self::labelId($type, $value), $values));
+
+                continue;
+            }
+
+            $terms[] = match ($type) {
+                // Several categories are OR'ed in the search: labelIds would AND them.
+                'category' => self::group(array_map(fn (string $value) => 'category:'.self::categoryKey($value), $values)),
+                'domain' => self::group(array_map(fn (string $value) => 'from:@'.$value, $values)),
+                'sender' => self::group(array_map(fn (string $value) => 'from:'.$value, $values)),
+                'subject' => count($values) === 1
+                    ? 'subject:"'.$values[0].'"'
+                    : 'subject:('.implode(' OR ', array_map(fn (string $value) => '"'.$value.'"', $values)).')',
+            };
+        }
 
         [$add, $remove] = match ($rule->action) {
             'archive' => [[], ['INBOX']],
@@ -70,5 +93,23 @@ final readonly class RuleQuery
         }
 
         return new self($query, $labelIds, $add, $remove);
+    }
+
+    private static function labelId(string $type, string $value): string
+    {
+        return $type === 'label' ? $value : RetentionRule::CATEGORIES[self::categoryKey($value)];
+    }
+
+    private static function categoryKey(string $value): string
+    {
+        return array_key_exists($value, RetentionRule::CATEGORIES) ? $value : throw new InvalidArgumentException('Unknown category.');
+    }
+
+    /**
+     * @param  list<string>  $terms
+     */
+    private static function group(array $terms): string
+    {
+        return count($terms) === 1 ? $terms[0] : '{'.implode(' ', $terms).'}';
     }
 }

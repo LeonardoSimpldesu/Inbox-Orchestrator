@@ -36,15 +36,15 @@ class RuleMatcher
 
     private function ensureLabelsExist(RetentionRule $rule): void
     {
-        if ($rule->filter_type !== 'label' && $rule->action !== 'add_label') {
+        $used = $rule->conditions->where('type', 'label')->pluck('value')
+            ->when($rule->action === 'add_label', fn ($ids) => $ids->push($rule->target_label))
+            ->all();
+
+        if ($used === []) {
             return;
         }
 
         $labelIds = array_column($this->provider->listLabels($rule->account), 'id');
-        $used = array_filter([
-            $rule->filter_type === 'label' ? $rule->filter_value : null,
-            $rule->action === 'add_label' ? $rule->target_label : null,
-        ]);
 
         if (array_diff($used, $labelIds) !== []) {
             throw new LabelMissing('label_missing');
