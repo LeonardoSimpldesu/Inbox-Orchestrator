@@ -6,6 +6,7 @@ use App\Models\EmailAccount;
 use App\Models\RetentionRule;
 use App\Models\RuleExecutionLog;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class RetentionRuleTest extends TestCase
@@ -94,5 +95,73 @@ class RetentionRuleTest extends TestCase
         $this->rule();
 
         $this->assertSame(1, RetentionRule::active()->count());
+    }
+
+    public function test_kinds_and_condition_types(): void
+    {
+        $this->assertSame(['manual', 'sender_category', 'sender_cleanup', 'hub_block'], RetentionRule::KINDS);
+        $this->assertSame(['sender_category', 'sender_cleanup', 'hub_block'], RetentionRule::MANAGED_KINDS);
+        $this->assertSame(['category', 'label', 'domain', 'sender', 'subject'], RetentionRule::CONDITION_TYPES);
+        $this->assertSame('manual', $this->rule()->fresh()->kind);
+        $this->assertFalse($this->rule()->isManaged());
+        $this->assertTrue($this->rule(['kind' => 'hub_block'])->isManaged());
+    }
+
+    public function test_replace_conditions_swaps_the_list_in_order(): void
+    {
+        $rule = $this->rule();
+        $rule->replaceConditions([['type' => 'category', 'value' => 'promotions']]);
+        $rule->replaceConditions([['type' => 'subject', 'value' => 'Bem-vindo'], ['type' => 'subject', 'value' => 'Welcome']]);
+
+        $this->assertSame(
+            [['type' => 'subject', 'value' => 'Bem-vindo'], ['type' => 'subject', 'value' => 'Welcome']],
+            $rule->fresh()->conditions->map->only(['type', 'value'])->all(),
+        );
+        $this->assertSame(2, DB::table('retention_rule_conditions')->count());
+    }
+
+    public function test_deleting_a_rule_deletes_its_conditions(): void
+    {
+        $rule = $this->rule();
+        $rule->replaceConditions([['type' => 'domain', 'value' => 'x.com']]);
+
+        $rule->delete();
+
+        $this->assertSame(0, DB::table('retention_rule_conditions')->count());
+    }
+
+    public function test_insert_with_conditions_pairs_each_rule_with_its_conditions_in_constant_queries(): void
+    {
+        $account = EmailAccount::factory()->create();
+        $row = fn (int $i) => [
+            'email_account_id' => $account->id, 'name' => "Regra {$i}", 'kind' => 'sender_cleanup', 'filter_type' => 'sender', 'filter_value' => 'x',
+            'retention_days' => 0, 'action' => 'trash', 'created_at' => now(), 'updated_at' => now(),
+        ];
+        // An older rule of the same kind must keep its own conditions.
+        RetentionRule::insertWithConditions([$row(0)], [[['type' => 'sender', 'value' => 's0@x.com']]]);
+
+        $count = function (int $n) use ($row): int {
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            RetentionRule::insertWithConditions(
+                array_map($row, range(1, $n)),
+                array_map(fn (int $i) => [['type' => 'sender', 'value' => "s{$i}@x.com"], ['type' => 'subject', 'value' => "Oi {$i}"]], range(1, $n)),
+            );
+            DB::disableQueryLog();
+
+            return collect(DB::getQueryLog())->reject(fn (array $q) => str_contains($q['query'], 'savepoint'))->count();
+        };
+
+        $this->assertSame($count(1), $count(50));
+
+        foreach (RetentionRule::with('conditions')->get() as $rule) {
+            $i = (int) substr($rule->name, 6);
+            $expected = [['type' => 'sender', 'value' => "s{$i}@x.com"]];
+            if ($i > 0) {
+                $expected[] = ['type' => 'subject', 'value' => "Oi {$i}"];
+            }
+            $this->assertSame($expected, $rule->conditions->map->only(['type', 'value'])->all());
+        }
+        $this->assertSame(52, RetentionRule::count());
     }
 }
