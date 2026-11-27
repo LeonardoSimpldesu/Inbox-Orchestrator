@@ -115,6 +115,20 @@ class DeployFilesTest extends TestCase
         $this->assertMatchesRegularExpression('/location ~ \/\\\\\.\(\?!well-known\)\.\* \{\s*deny all;/', $nginx, 'Dotfiles must be denied.');
     }
 
+    public function test_nginx_refuses_hosts_other_than_the_app(): void
+    {
+        // Without a default server, the app's server answers any Host header.
+        foreach (['deploy/nginx.conf.template', 'deploy/nginx-bootstrap.conf.template'] as $file) {
+            $nginx = $this->read($file);
+            $this->assertMatchesRegularExpression('/listen 80 default_server;\s*listen \[::\]:80 default_server;\s*server_name _;[^}]*return 444;/', $nginx, $file);
+        }
+
+        $this->assertMatchesRegularExpression(
+            '/listen 443 ssl http2 default_server;\s*listen \[::\]:443 ssl http2 default_server;\s*server_name _;[^}]*ssl_reject_handshake on;/',
+            $this->read('deploy/nginx.conf.template'),
+        );
+    }
+
     private function read(string $file): string
     {
         $path = base_path($file);

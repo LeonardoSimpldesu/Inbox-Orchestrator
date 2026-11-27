@@ -213,6 +213,18 @@ O workflow **Deploy** (aba Actions) roda o CI nesse commit, confere que ele est�
 - **Na mão, na VPS:** `sudo -u inbox /var/www/inbox/deploy/deploy.sh` publica a tag mais recente; `deploy.sh v1.2.0` publica uma específica. Um deploy manual e um automático nunca rodam juntos.
 - Mudou só o `.env`? Rode o deploy da tag atual (ele recria o cache de configuração).
 
+### Atualizar a configuração do nginx
+
+A publicação por tag atualiza o app, mas não mexe no nginx. Quando `deploy/nginx.conf.template` mudar (as notas da versão avisam), aplique na VPS depois de publicar a tag, trocando o domínio:
+
+```bash
+sudo sed -e 's|__APP_DOMAIN__|inbox.example.com|g' -e 's|__APP_DIR__|/var/www/inbox|g' \
+  /var/www/inbox/deploy/nginx.conf.template | sudo tee /etc/nginx/sites-available/inbox > /dev/null
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+O `nginx -t` confere a configuração antes do `reload`; se ele acusar erro, o nginx continua com a configuração anterior.
+
 ### Configurar a publicação automática (uma vez)
 
 1. **Chave de deploy**, no seu computador (sem senha, pois o GitHub não digita senha):
