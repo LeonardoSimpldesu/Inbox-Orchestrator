@@ -27,7 +27,7 @@ class SenderCategoriesTest extends TestCase
 
     private function categoryRule(EmailSender $sender, string $label): RetentionRule
     {
-        return RetentionRule::create(['email_account_id' => $sender->email_account_id, 'name' => 'x', 'filter_type' => 'sender', 'filter_value' => $sender->email, 'retention_days' => 0, 'action' => 'add_label', 'target_label' => $label, 'is_active' => true]);
+        return RetentionRule::factory()->withConditions([['sender', $sender->email]])->create(['email_account_id' => $sender->email_account_id, 'filter_type' => 'sender', 'filter_value' => $sender->email, 'kind' => 'sender_category', 'name' => 'x', 'retention_days' => 0, 'action' => 'add_label', 'target_label' => $label, 'is_active' => true]);
     }
 
     public function test_reads_categories_in_one_query(): void
@@ -37,7 +37,7 @@ class SenderCategoriesTest extends TestCase
         $other = $this->sender('a@banco.com', account: EmailAccount::factory()->create());
         $this->categoryRule($banco, 'Label_1');
         $this->categoryRule($other, 'Label_9');
-        RetentionRule::create(['email_account_id' => $this->account->id, 'name' => 'y', 'filter_type' => 'sender', 'filter_value' => 'b@x.com', 'retention_days' => 0, 'action' => 'archive']);
+        RetentionRule::factory()->withConditions([['sender', 'b@x.com']])->create(['email_account_id' => $this->account->id, 'filter_type' => 'sender', 'filter_value' => 'b@x.com', 'action' => 'add_label', 'target_label' => 'Label_5']);
 
         DB::enableQueryLog();
         $categories = (new SenderCategories)->forSenders(collect([$banco, $none, $other]));
@@ -59,7 +59,8 @@ class SenderCategoriesTest extends TestCase
 
         $this->assertSame([$new->id => ['old' => null, 'new' => 'Label_1'], $moved->id => ['old' => 'Label_old', 'new' => 'Label_1']], $changes);
         $rule = RetentionRule::where('filter_value', 'new@banco.com')->sole();
-        $this->assertSame(['Categoria Banco: Banco Novo', 'sender', 'add_label', 'Label_1', 0, true], [$rule->name, $rule->filter_type, $rule->action, $rule->target_label, $rule->retention_days, $rule->is_active]);
+        $this->assertSame(['Categoria Banco: Banco Novo', 'sender_category', 'add_label', 'Label_1', 0, true], [$rule->name, $rule->kind, $rule->action, $rule->target_label, $rule->retention_days, $rule->is_active]);
+        $this->assertSame([['type' => 'sender', 'value' => 'new@banco.com']], $rule->conditions->map->only(['type', 'value'])->all());
         $this->assertSame(now()->timestamp, $rule->simulated_at->timestamp);
         $this->assertSame('Categoria Banco: moved@banco.com', RetentionRule::where('filter_value', 'moved@banco.com')->sole()->name);
         $this->assertSame(2, RetentionRule::count());

@@ -155,6 +155,12 @@ class SubscriptionController extends Controller
             return back()->with('error', 'Aguarde a desinscrição em andamento terminar.');
         }
 
+        // Back to pending also ends the Hub block, or its mail would keep being moved.
+        RetentionRule::where('email_account_id', $subscription->email_account_id)
+            ->where('kind', 'hub_block')
+            ->whereHas('conditions', fn ($query) => $query->where('type', 'sender')->where('value', $subscription->email))
+            ->delete();
+
         EmailSender::whereKey($subscription->id)->update([
             'unsubscribe_status' => EmailSender::STATUS_NONE,
             'unsubscribe_method' => null,
@@ -201,8 +207,9 @@ class SubscriptionController extends Controller
     {
         $label = $sender->name ?? $sender->email;
 
-        RetentionRule::create([
+        $rule = RetentionRule::create([
             'email_account_id' => $sender->email_account_id,
+            'kind' => 'hub_block',
             'name' => ($action === 'trash' ? 'Mandar para a lixeira e-mails de ' : 'Arquivar e-mails de ').$label,
             'filter_type' => 'sender',
             'filter_value' => $sender->email,
@@ -210,6 +217,7 @@ class SubscriptionController extends Controller
             'action' => $action,
             'is_active' => true,
         ]);
+        $rule->replaceConditions([['type' => 'sender', 'value' => $sender->email]]);
 
         $sender->forceFill([
             'unsubscribe_status' => EmailSender::STATUS_BLOCKED,

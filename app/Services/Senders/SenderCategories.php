@@ -10,8 +10,9 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
 /**
- * A sender's category is its "sender → apply label" rule; there is no other
- * copy of it, so the senders page and the rules page always agree.
+ * A sender's category is its sender_category rule (one sender condition, apply
+ * label); there is no other copy of it, so the senders page and the rules page
+ * always agree.
  */
 class SenderCategories
 {
@@ -25,8 +26,8 @@ class SenderCategories
             return [];
         }
 
-        $labels = $this->rulesFor($senders)->get(['email_account_id', 'filter_value', 'target_label'])
-            ->mapWithKeys(fn (RetentionRule $rule) => [$rule->email_account_id.'|'.$rule->filter_value => $rule->target_label]);
+        $labels = $this->rulesFor($senders)->get(['retention_rules.email_account_id', 'retention_rule_conditions.value as sender_email', 'retention_rules.target_label'])
+            ->mapWithKeys(fn (RetentionRule $rule) => [$rule->email_account_id.'|'.$rule->sender_email => $rule->target_label]);
 
         return $senders->mapWithKeys(fn (EmailSender $sender) => [
             $sender->id => $labels[$sender->email_account_id.'|'.$sender->email] ?? null,
@@ -42,7 +43,7 @@ class SenderCategories
      */
     public function assign(EmailAccount $account, Collection $senders, ?string $labelId, ?string $labelName): array
     {
-        $rules = $this->rulesFor($senders)->get()->keyBy('filter_value');
+        $rules = $this->rulesFor($senders)->get(['retention_rules.*', 'retention_rule_conditions.value as sender_email'])->keyBy('sender_email');
         $changed = $senders->filter(fn (EmailSender $sender) => ($rules[$sender->email]->target_label ?? null) !== $labelId);
 
         if ($changed->isEmpty()) {
@@ -55,6 +56,7 @@ class SenderCategories
             $now = now();
             $row = fn (EmailSender $sender) => [
                 'email_account_id' => $account->id,
+                'kind' => 'sender_category',
                 'name' => Str::limit('Categoria '.$labelName.': '.($sender->name ?? $sender->email), 100, ''),
                 'filter_type' => 'sender',
                 'filter_value' => $sender->email,
@@ -78,7 +80,10 @@ class SenderCategories
             }
 
             if ($new->isNotEmpty()) {
-                RetentionRule::insert($new->map(fn (EmailSender $sender) => [...$row($sender), 'created_at' => $now])->values()->all());
+                RetentionRule::insertWithConditions(
+                    $new->map(fn (EmailSender $sender) => [...$row($sender), 'created_at' => $now])->values()->all(),
+                    $new->map(fn (EmailSender $sender) => [['type' => 'sender', 'value' => $sender->email]])->values()->all(),
+                );
             }
         }
 
@@ -93,9 +98,10 @@ class SenderCategories
      */
     private function rulesFor(Collection $senders): Builder
     {
-        return RetentionRule::where('filter_type', 'sender')
-            ->where('action', 'add_label')
-            ->whereIn('email_account_id', $senders->pluck('email_account_id')->unique()->values())
-            ->whereIn('filter_value', $senders->pluck('email')->unique()->values());
+        return RetentionRule::join('retention_rule_conditions', 'retention_rule_conditions.retention_rule_id', '=', 'retention_rules.id')
+            ->where('retention_rules.kind', 'sender_category')
+            ->where('retention_rule_conditions.type', 'sender')
+            ->whereIn('retention_rules.email_account_id', $senders->pluck('email_account_id')->unique()->values())
+            ->whereIn('retention_rule_conditions.value', $senders->pluck('email')->unique()->values());
     }
 }

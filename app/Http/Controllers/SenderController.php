@@ -177,10 +177,11 @@ class SenderController extends Controller
     private function categoryRule(?string $labelId = null): \Closure
     {
         return fn (QueryBuilder $query) => $query->selectRaw('1')->from('retention_rules')
+            ->join('retention_rule_conditions', 'retention_rule_conditions.retention_rule_id', '=', 'retention_rules.id')
             ->whereColumn('retention_rules.email_account_id', 'email_senders.email_account_id')
-            ->whereColumn('retention_rules.filter_value', 'email_senders.email')
-            ->where('retention_rules.filter_type', 'sender')
-            ->where('retention_rules.action', 'add_label')
+            ->whereColumn('retention_rule_conditions.value', 'email_senders.email')
+            ->where('retention_rule_conditions.type', 'sender')
+            ->where('retention_rules.kind', 'sender_category')
             ->when($labelId !== null, fn (QueryBuilder $q) => $q->where('retention_rules.target_label', $labelId));
     }
 
@@ -191,18 +192,21 @@ class SenderController extends Controller
      */
     private function createFutureRules(Collection $senders, string $action): void
     {
-        $existing = RetentionRule::where('filter_type', 'sender')
-            ->where('action', $action)
-            ->whereIn('email_account_id', $senders->pluck('email_account_id')->unique()->values())
-            ->whereIn('filter_value', $senders->pluck('email')->unique()->values())
-            ->get(['email_account_id', 'filter_value'])
-            ->map(fn (RetentionRule $rule) => $rule->email_account_id.'|'.$rule->filter_value);
+        $existing = RetentionRule::join('retention_rule_conditions', 'retention_rule_conditions.retention_rule_id', '=', 'retention_rules.id')
+            ->where('retention_rules.kind', 'sender_cleanup')
+            ->where('retention_rules.action', $action)
+            ->where('retention_rule_conditions.type', 'sender')
+            ->whereIn('retention_rules.email_account_id', $senders->pluck('email_account_id')->unique()->values())
+            ->whereIn('retention_rule_conditions.value', $senders->pluck('email')->unique()->values())
+            ->get(['retention_rules.email_account_id', 'retention_rule_conditions.value as sender_email'])
+            ->map(fn (RetentionRule $rule) => $rule->email_account_id.'|'.$rule->sender_email);
 
         $now = now();
-        $rows = $senders
-            ->reject(fn (EmailSender $sender) => $existing->contains($sender->email_account_id.'|'.$sender->email))
+        $missing = $senders->reject(fn (EmailSender $sender) => $existing->contains($sender->email_account_id.'|'.$sender->email))->values();
+        $rows = $missing
             ->map(fn (EmailSender $sender) => [
                 'email_account_id' => $sender->email_account_id,
+                'kind' => 'sender_cleanup',
                 'name' => Str::limit(($action === 'trash' ? 'Mandar para a lixeira e-mails de ' : 'Arquivar e-mails de ').($sender->name ?? $sender->email), 100, ''),
                 'filter_type' => 'sender',
                 'filter_value' => $sender->email,
@@ -216,7 +220,10 @@ class SenderController extends Controller
             ]);
 
         if ($rows->isNotEmpty()) {
-            RetentionRule::insert($rows->values()->all());
+            RetentionRule::insertWithConditions(
+                $rows->all(),
+                $missing->map(fn (EmailSender $sender) => [['type' => 'sender', 'value' => $sender->email]])->all(),
+            );
         }
     }
 
