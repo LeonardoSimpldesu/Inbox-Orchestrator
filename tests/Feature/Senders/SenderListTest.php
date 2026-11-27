@@ -5,6 +5,7 @@ namespace Tests\Feature\Senders;
 use App\Exceptions\ProviderUnavailable;
 use App\Models\EmailAccount;
 use App\Models\EmailSender;
+use App\Models\RetentionRule;
 use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -61,6 +62,8 @@ class SenderListTest extends SendersTestCase
         $banco = $this->sender(['email' => 'inter@banco.com', 'name' => 'Banco Inter']);
         $this->categorize($banco, 'Label_1');
         $this->sender(['email' => 'maria@gmail.com', 'name' => 'Maria']);
+        // A manual rule shaped like a category is not one.
+        RetentionRule::factory()->withConditions([['sender', 'maria@gmail.com']])->create(['email_account_id' => $this->account->id, 'filter_type' => 'sender', 'filter_value' => 'maria@gmail.com', 'action' => 'add_label', 'target_label' => 'Label_1']);
         $this->sender(['email' => 'joao@gmail.com'], $second);
         $foreign = EmailAccount::factory()->create();
 

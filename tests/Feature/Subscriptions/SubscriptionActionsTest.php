@@ -73,8 +73,8 @@ class SubscriptionActionsTest extends SubscriptionTestCase
         $rule = RetentionRule::sole();
         $this->assertSame($this->account->id, $rule->email_account_id);
         $this->assertSame('Mandar para a lixeira e-mails de Loja X', $rule->name);
-        $this->assertSame('sender', $rule->filter_type);
-        $this->assertSame('promo@lojax.com', $rule->filter_value);
+        $this->assertSame('hub_block', $rule->kind);
+        $this->assertSame([['type' => 'sender', 'value' => 'promo@lojax.com']], $rule->conditions->map->only(['type', 'value'])->all());
         $this->assertSame(0, $rule->retention_days);
         $this->assertSame('trash', $rule->action);
         $this->assertTrue($rule->is_active);
@@ -186,7 +186,11 @@ class SubscriptionActionsTest extends SubscriptionTestCase
             'unsubscribe_status' => 'blocked', 'unsubscribe_method' => 'rule',
             'unsubscribe_requested_at' => now(), 'unsubscribe_error' => 'cleanup_rate_limited',
         ]);
-        $rule = RetentionRule::create(['email_account_id' => $this->account->id, 'name' => 'R', 'filter_type' => 'sender', 'filter_value' => $sender->email, 'retention_days' => 0, 'action' => 'archive', 'is_active' => true]);
+        $block = fn (string $email, $account) => RetentionRule::factory()->withConditions([['sender', $email]])->create(['email_account_id' => $account->id, 'kind' => 'hub_block', 'filter_type' => 'sender', 'filter_value' => $email, 'retention_days' => 0, 'action' => 'archive', 'is_active' => true]);
+        $rule = $block($sender->email, $this->account);
+        $otherSender = $block('other@x.com', $this->account);
+        $otherAccount = $block($sender->email, EmailAccount::factory()->for($this->user)->create());
+        $manual = RetentionRule::factory()->withConditions([['sender', $sender->email]])->create(['email_account_id' => $this->account->id, 'filter_type' => 'sender', 'filter_value' => $sender->email, 'action' => 'trash']);
 
         $this->actingAs($this->user)->from('/subscriptions?status=handled')->post("/subscriptions/{$sender->id}/reset")
             ->assertRedirect('/subscriptions?status=handled')
@@ -194,7 +198,11 @@ class SubscriptionActionsTest extends SubscriptionTestCase
 
         $sender->refresh();
         $this->assertSame(['none', null, null, null], [$sender->unsubscribe_status, $sender->unsubscribe_method, $sender->unsubscribe_requested_at, $sender->unsubscribe_error]);
-        $this->assertModelExists($rule);
+        // Going back to pending stops the Hub block; other rules stay.
+        $this->assertModelMissing($rule);
+        $this->assertModelExists($otherSender);
+        $this->assertModelExists($otherAccount);
+        $this->assertModelExists($manual);
     }
 
     public function test_processing_sender_cannot_go_back_to_pending(): void

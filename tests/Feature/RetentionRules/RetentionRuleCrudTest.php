@@ -162,44 +162,30 @@ class RetentionRuleCrudTest extends RetentionRulesTestCase
         $this->assertFalse($rule->fresh()->is_active);
     }
 
-    public function test_delete_frees_hub_sender(): void
+    public function test_deleting_a_hub_block_frees_its_sender(): void
     {
         $sender = EmailSender::create(['email_account_id' => $this->account->id, 'email' => 'promo@loja.com', 'domain' => 'loja.com', 'unsubscribe_status' => 'blocked', 'unsubscribe_method' => 'rule']);
         $other = EmailSender::create(['email_account_id' => $this->account->id, 'email' => 'news@x.com', 'domain' => 'x.com', 'unsubscribe_status' => 'requested', 'unsubscribe_method' => 'one_click']);
-        $rule = $this->rule(['filter_type' => 'sender', 'filter_value' => 'promo@loja.com', 'retention_days' => 0]);
+        $rule = $this->rule(['kind' => 'hub_block', 'filter_type' => 'sender', 'filter_value' => 'promo@loja.com', 'retention_days' => 0]);
         $rule->logExecution('success', 3);
 
         $this->actingAs($this->user)->delete("/retention-rules/{$rule->id}")->assertSessionHas('success', 'Regra apagada.');
 
         $this->assertModelMissing($rule);
         $this->assertSame(0, RuleExecutionLog::count());
+        $this->assertSame(0, DB::table('retention_rule_conditions')->count());
         $this->assertSame(['none', null], [$sender->fresh()->unsubscribe_status, $sender->fresh()->unsubscribe_method]);
         $this->assertSame('requested', $other->fresh()->unsubscribe_status);
     }
 
-    public function test_delete_keeps_sender_blocked_while_another_rule_targets_it(): void
+    public function test_deleting_a_manual_sender_rule_keeps_the_hub_status(): void
     {
         $sender = EmailSender::create(['email_account_id' => $this->account->id, 'email' => 'promo@loja.com', 'domain' => 'loja.com', 'unsubscribe_status' => 'blocked', 'unsubscribe_method' => 'rule']);
-        $hubRule = $this->rule(['filter_type' => 'sender', 'filter_value' => 'promo@loja.com', 'retention_days' => 0, 'is_active' => true]);
-        $duplicate = $this->rule(['filter_type' => 'sender', 'filter_value' => 'promo@loja.com', 'retention_days' => 30]);
+        $manual = $this->rule(['filter_type' => 'sender', 'filter_value' => 'promo@loja.com', 'retention_days' => 0]);
 
-        $this->actingAs($this->user)->delete("/retention-rules/{$duplicate->id}");
+        $this->actingAs($this->user)->delete("/retention-rules/{$manual->id}");
+
         $this->assertSame('blocked', $sender->fresh()->unsubscribe_status);
-
-        $this->actingAs($this->user)->delete("/retention-rules/{$hubRule->id}");
-        $this->assertSame('none', $sender->fresh()->unsubscribe_status);
-    }
-
-    public function test_editing_a_sender_rule_away_from_the_sender_releases_it(): void
-    {
-        $sender = EmailSender::create(['email_account_id' => $this->account->id, 'email' => 'news@x.com', 'domain' => 'x.com', 'unsubscribe_status' => 'blocked', 'unsubscribe_method' => 'rule']);
-        $rule = $this->rule(['filter_type' => 'sender', 'filter_value' => 'news@x.com', 'retention_days' => 0, 'is_active' => true]);
-
-        $this->actingAs($this->user)->put("/retention-rules/{$rule->id}", $this->payload(['conditions' => [['type' => 'sender', 'value' => 'news@x.com']], 'retention_days' => 7]));
-        $this->assertSame('blocked', $sender->fresh()->unsubscribe_status);
-
-        $this->actingAs($this->user)->put("/retention-rules/{$rule->id}", $this->payload(['conditions' => [['type' => 'domain', 'value' => 'x.com']]]));
-        $this->assertSame('none', $sender->fresh()->unsubscribe_status);
     }
 
     public function test_foreign_rules_are_404(): void

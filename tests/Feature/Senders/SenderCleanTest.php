@@ -46,9 +46,10 @@ class SenderCleanTest extends SendersTestCase
 
         $rule = RetentionRule::sole();
         $this->assertSame(
-            [$this->account->id, 'Arquivar e-mails de Banco Inter', 'sender', 'inter@banco.com', 0, 'archive', true, now()->timestamp],
-            [$rule->email_account_id, $rule->name, $rule->filter_type, $rule->filter_value, $rule->retention_days, $rule->action, $rule->is_active, $rule->simulated_at->timestamp],
+            [$this->account->id, 'Arquivar e-mails de Banco Inter', 'sender_cleanup', 0, 'archive', true, now()->timestamp],
+            [$rule->email_account_id, $rule->name, $rule->kind, $rule->retention_days, $rule->action, $rule->is_active, $rule->simulated_at->timestamp],
         );
+        $this->assertSame([['type' => 'sender', 'value' => 'inter@banco.com']], $rule->conditions->map->only(['type', 'value'])->all());
 
         $trash = $this->sender(['name' => null, 'email' => 'spam@x.com']);
         $this->clean(['ids' => [$trash->id], 'cleanup' => 'trash', 'future' => true]);
@@ -64,6 +65,17 @@ class SenderCleanTest extends SendersTestCase
         $this->clean(['ids' => [$sender->id], 'cleanup' => 'trash', 'future' => true]);
 
         $this->assertSame(['archive', 'trash'], RetentionRule::orderBy('id')->pluck('action')->all());
+    }
+
+    public function test_a_manual_rule_with_more_conditions_does_not_count_as_the_cleanup_rule(): void
+    {
+        $sender = $this->sender(['email' => 'news@loja.com']);
+        RetentionRule::factory()->withConditions([['sender', 'news@loja.com'], ['subject', 'Oferta']])
+            ->create(['email_account_id' => $this->account->id, 'filter_type' => 'sender', 'filter_value' => 'news@loja.com', 'action' => 'trash', 'retention_days' => 0]);
+
+        $this->clean(['ids' => [$sender->id], 'cleanup' => 'trash', 'future' => true]);
+
+        $this->assertSame(1, RetentionRule::where('kind', 'sender_cleanup')->count());
     }
 
     public function test_needs_reauth_accounts_skipped(): void
