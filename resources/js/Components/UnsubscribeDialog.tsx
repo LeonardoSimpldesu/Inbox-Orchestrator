@@ -127,7 +127,7 @@ export default function UnsubscribeDialog({ subscription, onClose }: Unsubscribe
                         {(
                             [
                                 ['keep', 'Manter'],
-                                ['archive', `Arquivar os ${subscription.total} e-mails`],
+                                ['archive', `Arquivar os e-mails (${subscription.total})`],
                                 ['trash', 'Mandar para a lixeira (recuperáveis por 30 dias no Gmail)'],
                             ] as const
                         ).map(([value, label]) => (
@@ -136,6 +136,7 @@ export default function UnsubscribeDialog({ subscription, onClose }: Unsubscribe
                                 {label}
                             </label>
                         ))}
+                        <p className="text-xs text-slate-500">E-mails com estrela nunca são tocados.</p>
                     </fieldset>
                 )}
 

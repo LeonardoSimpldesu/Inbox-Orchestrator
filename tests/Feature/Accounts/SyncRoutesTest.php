@@ -91,6 +91,22 @@ class SyncRoutesTest extends AccountsTestCase
         );
     }
 
+    public function test_sync_and_history_import_are_throttled(): void
+    {
+        foreach (['sync', 'import-history'] as $action) {
+            // One user per route: the 30/min budget is per user and shared by every throttled action.
+            $user = User::factory()->create();
+            $account = EmailAccount::factory()->for($user)->create(['history_id' => '1']);
+            $url = $action === 'sync' ? '/accounts/sync' : "/accounts/{$account->id}/import-history";
+
+            for ($i = 0; $i < 30; $i++) {
+                $this->actingAs($user)->post($url)->assertRedirect();
+            }
+
+            $this->actingAs($user)->post($url)->assertStatus(429);
+        }
+    }
+
     public function test_guests_cannot_trigger_sync(): void
     {
         $this->post('/accounts/sync')->assertRedirect('/login');
